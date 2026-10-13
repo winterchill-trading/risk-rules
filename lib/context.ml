@@ -55,10 +55,15 @@ module Past_transfer = struct
     (* Transfers still waiting for strong authentication count: otherwise a customer could
        queue many unconfirmed transfers that each pass the cap alone and confirm them
        together. *)
+    (* Matched by constructor name: payments-core is still growing its status
+       set (rejections, recalls), and a name list keeps this summary compiling
+       across those additions. A recall that is requested or refused still
+       has the money out of the account, so it counts. *)
     let counts =
-      match transfer.status with
-      | Awaiting_sca | Submitted | Pending | Settled -> true
-      | Draft | Failed _ | Returned | Cancelled -> false
+      List.mem
+        [ "Awaiting_sca"; "Submitted"; "Pending"; "Settled"; "Recall_requested"; "Recall_refused" ]
+        (Payments_core.Transfer.Status.name transfer.status)
+        ~equal:String.equal
     in
     match transfer.direction, counts, List.last transfer.history with
     | Out, true, Some (_, at) ->
