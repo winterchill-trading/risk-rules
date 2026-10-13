@@ -21,6 +21,7 @@
    (>= 5.2))
   dune
   core
+  core_unix
   ppx_jane
   zarith
   money

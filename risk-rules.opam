@@ -11,6 +11,7 @@ depends: [
   "ocaml" {>= "5.2"}
   "dune" {>= "3.17"}
   "core"
+  "core_unix"
   "ppx_jane"
   "zarith"
   "money"
