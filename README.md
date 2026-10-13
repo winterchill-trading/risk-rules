@@ -41,7 +41,7 @@ let decide ~models ~draft ~tier ~outgoing ~incoming ~session ~now =
     ; balances = []
     ; subject = Transfer transfer
     ; history = List.filter_map outgoing ~f:Context.Past_transfer.of_transfer
-    ; incoming = List.filter_map incoming ~f:(Context.Past_transfer.of_incoming ?sender_key:None)
+    ; incoming = List.filter_map incoming ~f:(fun t -> Context.Past_transfer.of_incoming t)
     ; card_history = []
     ; geo = Context.Geo.unknown
     ; session
