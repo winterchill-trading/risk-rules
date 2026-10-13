@@ -157,6 +157,7 @@ let past span amount =
   { Context.Past_transfer.at = ago span
   ; amount
   ; beneficiary = Some (Payments_core.Beneficiary.Id.of_string "ben-1")
+  ; sender = None
   }
 ;;
 
@@ -164,6 +165,7 @@ let context
   ?(tier = "basic")
   ?(history = [])
   ?(incoming = [])
+  ?(card_history = [])
   ?(geo = Context.Geo.unknown)
   ?(session = Context.Session.unknown)
   ?(balances = [ eur "10000.00" ])
@@ -176,6 +178,7 @@ let context
   ; subject
   ; history
   ; incoming
+  ; card_history
   ; geo
   ; session
   }

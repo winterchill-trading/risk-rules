@@ -67,7 +67,8 @@ let%expect_test "past transfers count while live, not once failed" =
     {|
     (draft ())
     (submitted
-     (((at "2026-10-13 12:00:00Z") (amount "40.00 EUR") (beneficiary (ben-1)))))
+     (((at "2026-10-13 12:00:00Z") (amount "40.00 EUR") (beneficiary (ben-1))
+       (sender ()))))
     (failed ())
     |}]
 ;;
@@ -103,5 +104,5 @@ let%expect_test "context round trips and digest" =
          (module Context.Stable.V1)
          (Binable.to_string (module Context.Stable.V1) ctx)));
   print_endline [%bin_digest: Context.Stable.V1.t];
-  [%expect {| e2deaa50faaac2b9f180fdc9769a9bc4 |}]
+  [%expect {| 350beefa7795e4b994cd52ba46ccd8e6 |}]
 ;;

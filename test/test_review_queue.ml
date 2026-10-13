@@ -144,7 +144,7 @@ let%expect_test "stable round trip and digest" =
   print_endline [%bin_digest: Review_queue.Item.Stable.V1.t];
   [%expect
     {|
-    730269550212fa13b94e2c69c47e640b
-    012b1a2f2a03142c75ea8415661ad818
+    85d95697cfb3e18148afd89c2bdfa430
+    8047634937a866330f85f4df96aad2d5
     |}]
 ;;

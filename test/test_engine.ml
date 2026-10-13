@@ -76,8 +76,8 @@ let%expect_test "decision bin digest" =
   print_endline [%bin_digest: Hit.Stable.V1.t];
   [%expect
     {|
-    4f02b4e3bd245cb6c8cf214a1f614ace
-    c0bd3df451427f2c8cf4c628e70a9fbd
+    317c669077526c414d25196514a37655
+    1992a6da325a077df638521476ce8e5e
     |}]
 ;;
 
