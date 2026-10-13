@@ -46,6 +46,10 @@ val severity : _ t -> Severity.t
     that turns them into a decision. *)
 val check : 'ctx t -> 'ctx -> Hit.t option
 
+(** [cap t ~max] never reports above [max]; with [~max:Allow] the rule runs in shadow
+    mode: its hits are logged but change no decision. *)
+val cap : 'ctx t -> max:Severity.t -> 'ctx t
+
 (** Run a rule written for one context over another. *)
 val contramap : 'a t -> f:('b -> 'a) -> 'b t
 

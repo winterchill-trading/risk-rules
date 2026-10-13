@@ -54,6 +54,16 @@ let check t ctx =
     })
 ;;
 
+let cap t ~max =
+  { t with
+    severity = Severity.min t.severity max
+  ; check =
+      (fun ctx ->
+        Option.map (t.check ctx) ~f:(fun (outcome : Outcome.t) ->
+          { outcome with severity = Severity.min outcome.severity max }))
+  }
+;;
+
 let contramap t ~f = { t with check = (fun ctx -> t.check (f ctx)) }
 
 let always ~name ~severity ~code ~reason =
