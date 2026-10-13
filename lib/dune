@@ -1,6 +1,6 @@
 (library
  (name risk_rules)
  (public_name risk-rules)
- (libraries core zarith money payments-core)
+ (libraries core zarith yojson money payments-core)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_yojson_conv)))

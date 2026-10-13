@@ -23,6 +23,8 @@
   core
   core_unix
   ppx_jane
+  ppx_yojson_conv
+  yojson
   zarith
   money
   payments-core))
