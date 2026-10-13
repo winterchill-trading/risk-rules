@@ -193,28 +193,32 @@ let%expect_test "SCA unless an exemption applies" =
     (context
        ~session:{ Context.Session.unknown with new_device = true }
        (transfer ~beneficiary:untrusted (eur "50.00")));
-  (* Non-EUR amounts have no threshold to compare to. *)
+  (* Crypto payouts never get an exemption. *)
   explain
     rule
     (context
        (transfer ~beneficiary:(wallet_beneficiary ~trusted:false ()) (btc "0.00100000")));
   [%expect
     {|
-    -
+    allow SCA_EXEMPT: exempt: transaction risk analysis (RTS article 18)
+      exemption=tra
+      scheme=Credit_transfer
+      observed_fraud_rate_ppm=90
+      tra_threshold=250.00 EUR
     challenge SCA_REQUIRED: no SCA exemption: 300.00 EUR is above the 250.00 EUR exemption threshold
       scheme=Credit_transfer
       observed_fraud_rate_ppm=90
       tra_threshold=250.00 EUR
-    -
+    allow SCA_EXEMPT: exempt: trusted beneficiary (RTS article 13)
+      exemption=trusted_beneficiary
     challenge SCA_REQUIRED: no SCA exemption: risk signals: new_device
       scheme=Credit_transfer
       observed_fraud_rate_ppm=90
       tra_threshold=250.00 EUR
       signal=new_device
-    challenge SCA_REQUIRED: no SCA exemption: not in EUR (no conversion to the EUR thresholds)
+    challenge SCA_REQUIRED: no SCA exemption: crypto payouts always need strong authentication
       scheme=Credit_transfer
       observed_fraud_rate_ppm=90
-      tra_threshold=250.00 EUR
     |}];
   let with_model =
     Rules.sca_tra
@@ -237,7 +241,11 @@ let%expect_test "SCA unless an exemption applies" =
       model=const
       model_version=constant
       score=0.7000
-    -
+    allow SCA_EXEMPT: exempt: transaction risk analysis (RTS article 18)
+      exemption=tra
+      scheme=Card_not_present
+      observed_fraud_rate_ppm=700
+      tra_threshold=100.00 EUR
     challenge SCA_REQUIRED: no SCA exemption: 120.00 EUR is above the 100.00 EUR exemption threshold
       scheme=Card_not_present
       observed_fraud_rate_ppm=700
