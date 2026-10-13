@@ -4,7 +4,7 @@ open Risk_rules
 (* The engine is generic over the context; an int stands in for a payment amount here so
    these tests need no domain types. *)
 let over ~name ~severity limit =
-  Rule.create ~name ~severity (fun amount ->
+  Rule.create ~name ~severity ~code:(Custom name) (fun amount ->
     Option.some_if (amount > limit) (sprintf "%d > %d" amount limit))
 ;;
 
@@ -23,33 +23,36 @@ let%expect_test "worst severity wins and every hit is listed" =
   show 50;
   [%expect {|
     allow
-      note [allow] 50 > 10
+      note [allow] CUSTOM_note: 50 > 10
     |}];
   show 500;
   [%expect
     {|
     review
-      soft_cap [review] 500 > 100
-      note [allow] 500 > 10
+      soft_cap [review] CUSTOM_soft_cap: 500 > 100
+      note [allow] CUSTOM_note: 500 > 10
     |}];
   show 5_000;
   [%expect
     {|
     block
-      soft_cap [review] 5000 > 100
-      hard_cap [block] 5000 > 1000
-      note [allow] 5000 > 10
+      soft_cap [review] CUSTOM_soft_cap: 5000 > 100
+      hard_cap [block] CUSTOM_hard_cap: 5000 > 1000
+      note [allow] CUSTOM_note: 5000 > 10
     |}]
 ;;
 
 let%expect_test "a raising rule blocks" =
-  let boom = Rule.create ~name:"boom" ~severity:Allow (fun _ -> failwith "bad config") in
+  let boom =
+    Rule.create ~name:"boom" ~severity:Allow ~code:(Custom "BOOM") (fun _ ->
+      failwith "bad config")
+  in
   print_s [%sexp (Engine.evaluate [ boom ] 1 : Decision.t)];
   [%expect
     {|
     ((severity Block)
      (hits
-      (((rule boom) (severity Block)
+      (((rule boom) (severity Block) (code RULE_ERROR) (typology Operational)
         (reason "rule raised: (Failure \"bad config\")")))))
     |}]
 ;;
@@ -61,7 +64,8 @@ let%expect_test "decision sexp round trip re-derives severity" =
   (* A tampered severity is ignored on read. *)
   let tampered =
     Sexp.of_string
-      "((severity Allow) (hits (((rule hard_cap) (severity Block) (reason x)))))"
+      "((severity Allow) (hits (((rule hard_cap) (severity Block) (code LIMIT_DAILY) \
+       (typology Limits) (reason x)))))"
   in
   print_s [%sexp ((Decision.t_of_sexp tampered).severity : Severity.t)];
   [%expect {| Block |}]
@@ -72,8 +76,8 @@ let%expect_test "decision bin digest" =
   print_endline [%bin_digest: Hit.Stable.V1.t];
   [%expect
     {|
-    ba9839727ac2effef4b627222862be73
-    dec004807f30f7315da62151fe0c4d72
+    4f02b4e3bd245cb6c8cf214a1f614ace
+    c0bd3df451427f2c8cf4c628e70a9fbd
     |}]
 ;;
 

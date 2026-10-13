@@ -9,7 +9,14 @@ let at minutes =
 
 let review =
   Decision.of_hits
-    [ { rule = "velocity"; severity = Review; reason = "6 transfers in 10m" } ]
+    [ { rule = "velocity"
+      ; severity = Review
+      ; code = Velocity_out
+      ; typology = Velocity
+      ; reason = "6 transfers in 10m"
+      ; evidence = []
+      }
+    ]
 ;;
 
 let ok_exn = Or_error.ok_exn
@@ -51,7 +58,9 @@ let%expect_test "submit, annotate, decide" =
     ((id 1) (reference tr-1) (customer c-1)
      (decision
       ((severity Review)
-       (hits (((rule velocity) (severity Review) (reason "6 transfers in 10m"))))))
+       (hits
+        (((rule velocity) (severity Review) (code VELOCITY_OUT)
+          (typology Velocity) (reason "6 transfers in 10m"))))))
      (submitted_at "2026-10-13 09:00:00Z")
      (status
       (Decided (verdict Approve) (operator op-1) (at "2026-10-13 09:03:00Z")))
@@ -60,7 +69,9 @@ let%expect_test "submit, annotate, decide" =
     ((id 2) (reference tr-2) (customer c-2)
      (decision
       ((severity Review)
-       (hits (((rule velocity) (severity Review) (reason "6 transfers in 10m"))))))
+       (hits
+        (((rule velocity) (severity Review) (code VELOCITY_OUT)
+          (typology Velocity) (reason "6 transfers in 10m"))))))
      (submitted_at "2026-10-13 09:01:00Z") (status Pending) (notes ()))
     |}];
   (* Notes are still allowed after the decision; a second decision is not. *)
@@ -133,7 +144,7 @@ let%expect_test "stable round trip and digest" =
   print_endline [%bin_digest: Review_queue.Item.Stable.V1.t];
   [%expect
     {|
-    afa480f49e1330313b3ca56b3cf01301
-    8ff4b5511cc0aebd4173de3bc9bdfdcc
+    730269550212fa13b94e2c69c47e640b
+    012b1a2f2a03142c75ea8415661ad818
     |}]
 ;;

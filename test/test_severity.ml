@@ -4,9 +4,10 @@ open Risk_rules
 let%expect_test "severity order and digest" =
   print_s [%sexp (List.sort ~compare:Severity.compare Severity.all : Severity.t list)];
   print_endline [%bin_digest: Severity.Stable.V1.t];
-  [%expect {|
-    (Allow Review Block)
-    d93feac9a65338e0a1db6cc42af66a08
+  [%expect
+    {|
+    (Allow Challenge Review Block)
+    80849cee24797b17b5dfcef46c328d39
     |}]
 ;;
 
@@ -21,12 +22,19 @@ let%expect_test "worst" =
   [%expect
     {|
     allow allow -> allow
+    allow challenge -> challenge
     allow review -> review
     allow block -> block
+    challenge allow -> challenge
+    challenge challenge -> challenge
+    challenge review -> review
+    challenge block -> block
     review allow -> review
+    review challenge -> review
     review review -> review
     review block -> block
     block allow -> block
+    block challenge -> block
     block review -> block
     block block -> block
     |}]
