@@ -5,5 +5,6 @@
   (Card_auth
    ((id auth-1) (amount "40.00 EUR") (mcc 7995) (merchant_country (MT))
     (channel Online) (online_enabled false))))
- (history ())
- (geo ((ip_country (DE)) (residence (DE)))))
+ (history ()) (incoming ())
+ (geo ((ip_country (DE)) (residence (DE))))
+ (session ((new_device false) (credentials_changed_at ()) (account_opened_at ()))))

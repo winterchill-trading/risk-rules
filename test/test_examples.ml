@@ -16,9 +16,9 @@ let%expect_test "example contexts" =
   [%expect
     {|
     block
-      new_beneficiary_cooldown [block] 750.00 EUR to beneficiary ben-1 first seen 2h ago; above 250.00 EUR during the 1d cooldown
+      new_beneficiary_cooldown [block] NEW_BENEFICIARY_COOLDOWN: 750.00 EUR to beneficiary ben-1 first seen 2h ago; above 250.00 EUR during the 1d cooldown
     block
-      blocked_mcc [block] merchant category 7995 is blocked
-      online_toggle [block] online payments are switched off for this card
+      blocked_mcc [block] CARD_MCC_BLOCKED: merchant category 7995 is blocked
+      online_toggle [block] CARD_ONLINE_DISABLED: online payments are switched off for this card
     |}]
 ;;
