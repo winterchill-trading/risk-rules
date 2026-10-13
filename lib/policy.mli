@@ -31,12 +31,16 @@ val tiers : t -> Tier.t list
 (** The specs for a tier, [all_tiers] first. Fails on an unknown tier. *)
 val specs_for : t -> Tier.t -> Rule_spec.t list Or_error.t
 
-val rules_for : t -> Tier.t -> Context.t Rule.t list Or_error.t
+(** [models] as in {!Rule_spec.to_rule}. *)
+val rules_for : ?models:Model.t list -> t -> Tier.t -> Context.t Rule.t list Or_error.t
+
+(** Every model name the policy refers to, for a start-up check. *)
+val required_models : t -> string list
 
 (** Evaluates the context's tier. A tier the policy does not know is a [Block] (hit
     ["unknown_tier"]): a customer must never fall through to no rules because of a typo in
     the policy or a new tier in the product. *)
-val evaluate : t -> Context.t -> Decision.t
+val evaluate : ?models:Model.t list -> t -> Context.t -> Decision.t
 
 (** Parse and validate a policy from sexp text. *)
 val of_string : string -> t Or_error.t

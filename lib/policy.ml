@@ -38,16 +38,26 @@ let specs_for (t : t) tier =
   | None -> Or_error.error_s [%message "policy: unknown tier" (tier : Tier.t)]
 ;;
 
-let rules_for t tier = Or_error.map (specs_for t tier) ~f:(List.map ~f:Rule_spec.to_rule)
+let rules_for ?models t tier =
+  Or_error.map (specs_for t tier) ~f:(List.map ~f:(Rule_spec.to_rule ?models))
+;;
 
-let evaluate t (ctx : Context.t) =
-  match rules_for t ctx.tier with
+let required_models (t : t) =
+  List.concat_map (t.all_tiers @ List.concat_map t.tiers ~f:snd) ~f:Rule_spec.models
+  |> List.dedup_and_sort ~compare:String.compare
+;;
+
+let evaluate ?models t (ctx : Context.t) =
+  match rules_for ?models t ctx.tier with
   | Ok rules -> Engine.evaluate rules ctx
   | Error _ ->
     Decision.of_hits
       [ { rule = "unknown_tier"
         ; severity = Block
+        ; code = Unknown_tier
+        ; typology = Operational
         ; reason = sprintf "no rules for tier %s" (Tier.to_string ctx.tier)
+        ; evidence = [ "tier", Tier.to_string ctx.tier ]
         }
       ]
 ;;
