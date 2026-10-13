@@ -40,6 +40,26 @@ let needs_review t = Severity.equal t.severity Review
 let is_blocked t = Severity.equal t.severity Block
 let combine a b = of_hits (a.hits @ b.hits)
 
+let by_severity t =
+  List.stable_sort t.hits ~compare:(fun (a : Hit.t) (b : Hit.t) ->
+    Severity.compare b.severity a.severity)
+;;
+
+let reason_codes t =
+  List.map (by_severity t) ~f:(fun hit -> hit.code)
+  |> List.remove_consecutive_duplicates ~equal:Reason_code.equal
+  |> List.fold ~init:[] ~f:(fun acc code ->
+    if List.mem acc code ~equal:Reason_code.equal then acc else code :: acc)
+  |> List.rev
+;;
+
+let customer_message t =
+  match t.severity, by_severity t with
+  | Allow, _ | _, [] -> None
+  | (Challenge | Review | Block), worst :: _ ->
+    Some (Reason_code.customer_message worst.code)
+;;
+
 let to_string_hum t =
   match t.hits with
   | [] -> Severity.to_string t.severity
@@ -48,5 +68,10 @@ let to_string_hum t =
       ~sep:"\n"
       (Severity.to_string t.severity
        :: List.map hits ~f:(fun (hit : Hit.t) ->
-         sprintf "  %s [%s] %s" hit.rule (Severity.to_string hit.severity) hit.reason))
+         sprintf
+           "  %s [%s] %s: %s"
+           hit.rule
+           (Severity.to_string hit.severity)
+           (Reason_code.to_string hit.code)
+           hit.reason))
 ;;

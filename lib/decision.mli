@@ -33,5 +33,12 @@ val is_blocked : t -> bool
 (** Concatenate hits; the severity is the worst of both. *)
 val combine : t -> t -> t
 
+(** Distinct reason codes, most severe hit first. *)
+val reason_codes : t -> Reason_code.t list
+
+(** The message to show the customer: the one for the most severe hit's code (the first
+    such hit in rule order). [None] when allowed. *)
+val customer_message : t -> string option
+
 (** One line per hit, for logs and operator screens. *)
 val to_string_hum : t -> string
