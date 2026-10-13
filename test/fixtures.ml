@@ -10,24 +10,59 @@ let btc s = Money.Amount.of_string (s ^ " BTC")
 let limits = Limits.create_exn
 let country = Country.of_string
 
+(* Beneficiaries and drafts are real payments-core values, so these tests also check that
+   the context binds to them as the API layer will. *)
 let beneficiary
   ?(id = "ben-1")
-  ?country
+  ?(rail = Payments_core.Rail.Sepa_instant)
+  ?(destination = "DE89370400440532013000")
   ?(first_seen = ago (hours (24 * 90)))
   ?(trusted = true)
-  ?wallet
   ()
   =
-  { Context.Beneficiary.id; country; first_seen; trusted; wallet }
+  let b =
+    Payments_core.Beneficiary.create
+      ~id:(Payments_core.Beneficiary.Id.of_string id)
+      ~owner:"cust-1"
+      ~name:"Test Payee"
+      ~rail
+      ~now:first_seen
+      destination
+    |> Or_error.ok_exn
+  in
+  { b with trusted }
 ;;
 
-let transfer
-  ?(id = "tr-1")
-  ?(rail = Payments_core.Rail.Sepa_instant)
-  ?(beneficiary = beneficiary ())
-  amount
-  =
-  Context.Subject.Transfer { Context.Transfer.id; amount; rail; beneficiary }
+let btc_address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+
+let wallet_beneficiary () =
+  beneficiary ~rail:(Onchain Bitcoin) ~destination:btc_address ()
+;;
+
+let draft ?(id = "tr-1") ?beneficiary:(b = beneficiary ()) amount =
+  let rail : Payments_core.Rail.t =
+    match b.destination with
+    | Crypto { address; memo = _ } ->
+      Onchain (Payments_core.Crypto_address.network address)
+    | Bank_account _ -> Sepa_instant
+    | Lightning _ -> Lightning
+    | Internal _ -> Intraledger
+  in
+  Payments_core.Transfer.draft
+    ~id:(Payments_core.Transfer.Id.of_string id)
+    ~rail
+    ~account:(Ledger.Account_id.of_string "customer:1/eur")
+    ~beneficiary:b
+    ~amount
+    ~now:t0
+    ()
+  |> Or_error.ok_exn
+;;
+
+let transfer ?id ?beneficiary ?country ?wallet amount =
+  Context.Subject.Transfer
+    (Or_error.ok_exn
+       (Context.Transfer.create ?country ?wallet (draft ?id ?beneficiary amount)))
 ;;
 
 let card
@@ -48,8 +83,11 @@ let card
     }
 ;;
 
-let past ?(beneficiary_id = "ben-1") span amount =
-  { Context.Past_transfer.at = ago span; amount; beneficiary_id }
+let past span amount =
+  { Context.Past_transfer.at = ago span
+  ; amount
+  ; beneficiary = Some (Payments_core.Beneficiary.Id.of_string "ben-1")
+  }
 ;;
 
 let context

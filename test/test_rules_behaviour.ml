@@ -36,7 +36,10 @@ let%expect_test "new beneficiary cooldown" =
   check exempt (context (transfer ~beneficiary:fresh (eur "900.00")));
   check
     exempt
-    (context (transfer ~beneficiary:{ fresh with trusted = false } (eur "900.00")));
+    (context
+       (transfer
+          ~beneficiary:(beneficiary ~first_seen:(ago (hours 3)) ~trusted:false ())
+          (eur "900.00")));
   [%expect
     {|
     -
@@ -91,9 +94,7 @@ let%expect_test "countries" =
   let geo =
     { Context.Geo.ip_country = Some (country "AE"); residence = Some (country "DE") }
   in
-  let to_country c =
-    transfer ~beneficiary:(beneficiary ~country:(country c) ()) (eur "10.00")
-  in
+  let to_country c = transfer ~country:(country c) (eur "10.00") in
   check blocked (context (to_country "KP"));
   check risky (context (to_country "KP"));
   check risky (context ~geo (to_country "PA"));

@@ -36,8 +36,11 @@ let%expect_test "tiers get different caps" =
 ;;
 
 let%expect_test "all-tier rules apply to every tier" =
-  let fresh = beneficiary ~first_seen:(ago (hours 1)) ~country:(country "PA") () in
-  show (context ~tier:"verified" (transfer ~beneficiary:fresh (eur "5000.00")));
+  let fresh = beneficiary ~first_seen:(ago (hours 1)) () in
+  show
+    (context
+       ~tier:"verified"
+       (transfer ~beneficiary:fresh ~country:(country "PA") (eur "5000.00")));
   show
     (context
        ~tier:"verified"

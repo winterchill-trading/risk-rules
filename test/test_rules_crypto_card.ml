@@ -8,9 +8,8 @@ let%expect_test "self-hosted wallet travel-rule hook" =
   in
   let to_wallet ~self_hosted ~ownership_verified amount =
     transfer
-      ~rail:(Onchain Bitcoin)
-      ~beneficiary:
-        (beneficiary ~wallet:{ Context.Wallet.self_hosted; ownership_verified } ())
+      ~beneficiary:(wallet_beneficiary ())
+      ~wallet:{ Context.Wallet.self_hosted; ownership_verified }
       amount
   in
   check
