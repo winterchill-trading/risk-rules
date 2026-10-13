@@ -45,6 +45,21 @@ module Stable : sig
       ; hours_since_credentials_change : float option
       ; account_age_days : float option
       ; hour_of_day_utc : int
+      ; log1p_amount : float (** [log (1 + amount)] *)
+      ; is_weekend : bool (** Saturday or Sunday, UTC *)
+      ; out_count_7d : int
+      ; out_sum_1h : float
+      ; out_sum_7d : float
+      ; amount_over_mean_30d : float option
+      (** amount / mean outgoing amount in the currency over 30 days *)
+      ; in_distinct_senders_24h : int
+      ; minutes_since_last_inbound : float option
+      ; failed_sca_24h : int
+      ; payee_check : string option
+      (** verification of payee: ["Match"], ["Close_match"], ["No_match"],
+          ["Not_possible"] *)
+      ; card_auths_10m : int (** earlier authorisations on the card, 10 minutes *)
+      ; card_declines_10m : int
       }
     [@@deriving bin_io, sexp, compare, equal, yojson]
   end
@@ -60,7 +75,8 @@ val of_context : Context.t -> t
 val schema : (string * string) list
 
 (** Numeric vector in {!schema} order without the categorical string fields ([rail],
-    [card_channel], [currency]): booleans are 0/1, a missing option is [Float.nan]. *)
+    [card_channel], [currency], [payee_check]): booleans are 0/1, a missing option is
+    [Float.nan]. *)
 val to_floats : t -> (string * float) list
 
 (** The names {!to_floats} returns, in order. *)

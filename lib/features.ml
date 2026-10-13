@@ -31,6 +31,18 @@ module Stable = struct
       ; hours_since_credentials_change : float option
       ; account_age_days : float option
       ; hour_of_day_utc : int
+      ; log1p_amount : float
+      ; is_weekend : bool
+      ; out_count_7d : int
+      ; out_sum_1h : float
+      ; out_sum_7d : float
+      ; amount_over_mean_30d : float option
+      ; in_distinct_senders_24h : int
+      ; minutes_since_last_inbound : float option
+      ; failed_sca_24h : int
+      ; payee_check : string option
+      ; card_auths_10m : int
+      ; card_declines_10m : int
       }
     [@@deriving bin_io, sexp, compare, equal, yojson]
   end
@@ -68,6 +80,8 @@ let of_context (ctx : Context.t) =
   let out_24h = Context.history_within ctx ~window:day in
   let out_30d = Context.history_within ctx ~window:(Time_ns.Span.of_day 30.) in
   let in_24h = Context.incoming_within ctx ~window:day in
+  let out_7d = Context.history_within ctx ~window:(Time_ns.Span.of_day 7.) in
+  let card_10m = Context.card_history_within ctx ~window:(Time_ns.Span.of_min 10.) in
   let out_sum_24h = sum (same_currency currency out_24h) in
   let in_sum_24h = sum (same_currency currency in_24h) in
   let transfer = Context.transfer ctx in
@@ -124,6 +138,40 @@ let of_context (ctx : Context.t) =
   ; account_age_days =
       Option.map ctx.session.account_opened_at ~f:(fun opened ->
         Time_ns.Span.to_day (Time_ns.diff ctx.now opened))
+  ; log1p_amount = Float.log1p amount
+  ; is_weekend =
+      (match Date.day_of_week (Time_ns.to_date ctx.now ~zone:Time_float.Zone.utc) with
+       | Sat | Sun -> true
+       | Mon | Tue | Wed | Thu | Fri -> false)
+  ; out_count_7d = List.length out_7d
+  ; out_sum_1h = sum (same_currency currency out_1h)
+  ; out_sum_7d = sum (same_currency currency out_7d)
+  ; amount_over_mean_30d =
+      (match same_currency currency out_30d with
+       | [] -> None
+       | pasts ->
+         let mean = sum pasts /. Float.of_int (List.length pasts) in
+         Option.some_if Float.(mean > 0.) (amount /. mean))
+  ; in_distinct_senders_24h =
+      List.filter_map in_24h ~f:(fun p -> p.sender)
+      |> List.dedup_and_sort ~compare:String.compare
+      |> List.length
+  ; minutes_since_last_inbound =
+      List.map ctx.incoming ~f:(fun p -> p.at)
+      |> List.filter ~f:(fun at -> Time_ns.( <= ) at ctx.now)
+      |> List.max_elt ~compare:Time_ns.compare
+      |> Option.map ~f:(fun at -> Time_ns.Span.to_min (Time_ns.diff ctx.now at))
+  ; failed_sca_24h = ctx.session.failed_sca_24h
+  ; payee_check =
+      Option.bind transfer ~f:(fun t ->
+        Option.map t.beneficiary.payee_check ~f:(fun check ->
+          match (check : Payments_core.Beneficiary.Payee_check.t) with
+          | Match -> "Match"
+          | Close_match _ -> "Close_match"
+          | No_match -> "No_match"
+          | Not_possible -> "Not_possible"))
+  ; card_auths_10m = List.length card_10m
+  ; card_declines_10m = List.count card_10m ~f:(fun a -> not a.approved)
   ; hour_of_day_utc =
       Time_ns.to_ofday ctx.now ~zone:Time_float.Zone.utc
       |> Time_ns.Ofday.to_span_since_start_of_day
@@ -161,6 +209,18 @@ let schema =
   ; "hours_since_credentials_change", "hours since the last credential change"
   ; "account_age_days", "days since the account was opened"
   ; "hour_of_day_utc", "hour of the request, UTC"
+  ; "log1p_amount", "log (1 + amount)"
+  ; "is_weekend", "Saturday or Sunday, UTC"
+  ; "out_count_7d", "outgoing transfers in the last 7 days"
+  ; "out_sum_1h", "outgoing total in the currency, last hour"
+  ; "out_sum_7d", "outgoing total in the currency, last 7 days"
+  ; "amount_over_mean_30d", "amount / mean outgoing amount over 30 days"
+  ; "in_distinct_senders_24h", "distinct payers in the last 24 hours"
+  ; "minutes_since_last_inbound", "minutes since the last incoming transfer"
+  ; "failed_sca_24h", "failed strong authentication attempts, last 24 hours"
+  ; "payee_check", "verification of payee result"
+  ; "card_auths_10m", "earlier authorisations on the card, last 10 minutes"
+  ; "card_declines_10m", "declined authorisations on the card, last 10 minutes"
   ]
 ;;
 
@@ -192,11 +252,24 @@ let to_floats (t : t) =
   ; "hours_since_credentials_change", of_opt Fn.id t.hours_since_credentials_change
   ; "account_age_days", of_opt Fn.id t.account_age_days
   ; "hour_of_day_utc", Float.of_int t.hour_of_day_utc
+  ; "log1p_amount", t.log1p_amount
+  ; "is_weekend", of_bool t.is_weekend
+  ; "out_count_7d", Float.of_int t.out_count_7d
+  ; "out_sum_1h", t.out_sum_1h
+  ; "out_sum_7d", t.out_sum_7d
+  ; "amount_over_mean_30d", of_opt Fn.id t.amount_over_mean_30d
+  ; "in_distinct_senders_24h", Float.of_int t.in_distinct_senders_24h
+  ; "minutes_since_last_inbound", of_opt Fn.id t.minutes_since_last_inbound
+  ; "failed_sca_24h", Float.of_int t.failed_sca_24h
+  ; "card_auths_10m", Float.of_int t.card_auths_10m
+  ; "card_declines_10m", Float.of_int t.card_declines_10m
   ]
 ;;
 
 let numeric_names =
-  let categorical = [ "schema_version"; "rail"; "card_channel"; "currency" ] in
+  let categorical =
+    [ "schema_version"; "rail"; "card_channel"; "currency"; "payee_check" ]
+  in
   List.filter_map schema ~f:(fun (name, _) ->
     Option.some_if (not (List.mem categorical name ~equal:String.equal)) name)
 ;;
