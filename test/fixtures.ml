@@ -36,8 +36,8 @@ let beneficiary
 let beneficiary_default () = beneficiary ()
 let btc_address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
 
-let wallet_beneficiary () =
-  beneficiary ~rail:(Onchain Bitcoin) ~destination:btc_address ()
+let wallet_beneficiary ?trusted () =
+  beneficiary ?trusted ~rail:(Onchain Bitcoin) ~destination:btc_address ()
 ;;
 
 (* The customer's own IBAN, needed for the SEPA debtor party. *)
