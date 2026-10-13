@@ -2,7 +2,8 @@
  (name risk_rules_test)
  (libraries risk-rules core money ledger payments-core)
  (inline_tests
-  (deps ../examples/policy.sexp)
+  (deps
+   (glob_files ../examples/*.sexp))
   (flags
    (:standard -source-tree-root .)))
  (preprocess
