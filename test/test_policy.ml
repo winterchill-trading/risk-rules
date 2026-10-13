@@ -13,7 +13,7 @@ let%expect_test "example policy loads" =
     [%sexp
       (List.length (Or_error.ok_exn (Policy.specs_for example (Tier.of_string "basic")))
        : int)];
-  [%expect {| 11 |}]
+  [%expect {| 22 |}]
 ;;
 
 let show ctx = print_endline (Decision.to_string_hum (Policy.evaluate example ctx))
@@ -26,9 +26,15 @@ let%expect_test "tiers get different caps" =
   [%expect
     {|
     block
+      model_score [allow] SCORE_UNAVAILABLE: model fraud-gbt is not loaded
+      sca_tra [allow] SCA_EXEMPT: exempt: trusted beneficiary (RTS article 13)
       per_transfer_cap [block] LIMIT_PER_TRANSFER: 1500.00 EUR exceeds the per-transfer cap of 1000.00 EUR
     allow
+      model_score [allow] SCORE_UNAVAILABLE: model fraud-gbt is not loaded
+      sca_tra [allow] SCA_EXEMPT: exempt: trusted beneficiary (RTS article 13)
     review
+      model_score [allow] SCORE_UNAVAILABLE: model fraud-gbt is not loaded
+      sca_tra [allow] SCA_EXEMPT: exempt: trusted beneficiary (RTS article 13)
       manual_review [review] MANUAL_REVIEW: customer under investigation
     block
       unknown_tier [block] UNKNOWN_TIER: no rules for tier vip
@@ -50,9 +56,13 @@ let%expect_test "all-tier rules apply to every tier" =
     block
       high_risk_country [review] GEO_HIGH_RISK: high-risk country: PA
       new_beneficiary_cooldown [block] NEW_BENEFICIARY_COOLDOWN: 5000.00 EUR to beneficiary ben-1 first seen 1h ago; above 250.00 EUR during the 1d cooldown
+      model_score [allow] SCORE_UNAVAILABLE: model fraud-gbt is not loaded
+      sca_tra [allow] SCA_EXEMPT: exempt: trusted beneficiary (RTS article 13)
     block
       blocked_mcc [block] CARD_MCC_BLOCKED: merchant category 7995 is blocked
       online_toggle [block] CARD_ONLINE_DISABLED: online payments are switched off for this card
+      model_score [allow] SCORE_UNAVAILABLE: model fraud-gbt is not loaded
+      sca_tra [allow] SCA_EXEMPT: exempt: transaction risk analysis (RTS article 18)
     |}]
 ;;
 

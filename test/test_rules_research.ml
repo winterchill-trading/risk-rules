@@ -209,10 +209,12 @@ let%expect_test "decision messages and codes" =
           (eur "2900.00")));
   [%expect
     {|
-    (Allow () ())
-    (Block (LIMIT_PER_TRANSFER)
+    (Allow (SCORE_UNAVAILABLE SCA_EXEMPT) ())
+    (Block (LIMIT_PER_TRANSFER SCORE_UNAVAILABLE SCA_EXEMPT)
      ("This payment is above your limit for a single payment."))
-    (Block (NEW_BENEFICIARY_COOLDOWN)
+    (Block
+     (NEW_BENEFICIARY_COOLDOWN APP_NEW_BENEFICIARY_BALANCE SCA_REQUIRED
+      SCORE_UNAVAILABLE)
      ("Payments to a newly added payee are limited for a short time. Please try a smaller amount or try again later."))
     |}]
 ;;
