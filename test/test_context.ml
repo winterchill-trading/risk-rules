@@ -104,6 +104,8 @@ let%expect_test "context round trips and digest" =
       (Binable.of_string
          (module Context.Stable.V1)
          (Binable.to_string (module Context.Stable.V1) ctx)));
+  (* Embeds payments-core's Transfer and Beneficiary stable types: this digest changes
+     whenever theirs do, which is the point of pinning it. *)
   print_endline [%bin_digest: Context.Stable.V1.t];
   [%expect {| f8a0884bbaaaf6b8f3f824ea09e49efd |}]
 ;;
