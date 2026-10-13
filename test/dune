@@ -1,6 +1,6 @@
 (library
  (name risk_rules_test)
- (libraries risk-rules core expect_test_helpers_core)
+ (libraries risk-rules core money payments-core)
  (inline_tests
   (flags
    (:standard -source-tree-root .)))

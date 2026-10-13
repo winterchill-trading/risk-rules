@@ -21,4 +21,7 @@
    (>= 5.2))
   dune
   core
-  ppx_jane))
+  ppx_jane
+  zarith
+  money
+  payments-core))

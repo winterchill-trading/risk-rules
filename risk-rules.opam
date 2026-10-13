@@ -12,6 +12,9 @@ depends: [
   "dune" {>= "3.17"}
   "core"
   "ppx_jane"
+  "zarith"
+  "money"
+  "payments-core"
   "odoc" {with-doc}
 ]
 build: [
