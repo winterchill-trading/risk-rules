@@ -7,7 +7,7 @@ let check_one rule ctx =
     Some
       { Hit.rule = Rule.name rule
       ; severity = Block
-      ; reason = "rule raised: " ^ Exn.to_string_mach exn
+      ; reason = "rule raised: " ^ Exn.to_string exn
       }
 ;;
 
