@@ -1,0 +1,6 @@
+(library
+ (name risk_rules)
+ (public_name risk-rules)
+ (libraries core)
+ (preprocess
+  (pps ppx_jane)))
