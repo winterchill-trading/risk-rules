@@ -18,7 +18,7 @@ module Stable : sig
     type t =
       { schema_version : int (** always 1 for this version *)
       ; is_card : bool
-      ; rail : string (** ["card"] or the payments-core rail, e.g. ["Sepa_instant"] *)
+      ; rail : string (** ["card"] or the payments-core rail, e.g. ["sepa_instant"] *)
       ; card_channel : string option (** ["Online"], ["In_person"], ["Atm"] *)
       ; currency : string
       ; amount : float
