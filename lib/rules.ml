@@ -259,8 +259,72 @@ let mule_pass_through
         ] ))
 ;;
 
+let account_age (ctx : Context.t) =
+  Option.map ctx.session.account_opened_at ~f:(fun opened -> Time_ns.diff ctx.now opened)
+;;
+
+let mule_fan_in
+  ?(name = "mule_fan_in")
+  ?(severity = Severity.Review)
+  ~min_senders
+  ~window
+  ~max_account_age
+  ()
+  =
+  on_transfer ~name ~severity ~code:Mule_fan_in (fun ctx _ ->
+    let senders =
+      List.filter_map (Context.incoming_within ctx ~window) ~f:(fun p -> p.sender)
+      |> List.dedup_and_sort ~compare:String.compare
+    in
+    match account_age ctx with
+    | Some age when Time_ns.Span.( < ) age max_account_age ->
+      let n = List.length senders in
+      Option.some_if
+        (n >= min_senders)
+        ( sprintf
+            "%d distinct payers in %s into an account opened %s ago"
+            n
+            (span_str window)
+            (span_str age)
+        , [ "senders", Int.to_string n
+          ; "min_senders", Int.to_string min_senders
+          ; "account_age", span_str age
+          ] )
+    | Some _ | None -> None)
+;;
+
+let new_account_payout
+  ?(name = "new_account_payout")
+  ?(severity = Severity.Review)
+  ~max_age
+  ~above
+  ()
+  =
+  on_transfer ~name ~severity ~code:New_account_payout (fun ctx transfer ->
+    let amount = Context.Transfer.amount transfer in
+    let limit, note = Limits.limit_for above (Money.Amount.currency amount) in
+    match account_age ctx with
+    | Some age when Time_ns.Span.( < ) age max_age && exceeds amount ~limit ->
+      Some
+        ( sprintf
+            "%s from an account opened %s ago (above %s)%s"
+            (amount_str amount)
+            (span_str age)
+            (amount_str limit)
+            note
+        , limit_evidence ~amount ~limit ~note @ [ "account_age", span_str age ] )
+    | Some _ | None -> None)
+;;
+
+let large_share ~amount ~balance ~bps =
+  Money.Amount.is_positive balance
+  && Z.geq
+       (Z.mul (Money.Amount.minor_units amount) (Z.of_int 10_000))
+       (Z.mul (Money.Amount.minor_units balance) (Z.of_int bps))
+;;
+
 (* Shared by [account_takeover] and [sca_tra] so both count the same signals. *)
-let takeover_signals (ctx : Context.t) ~recent =
+let takeover_signals ?balance_share_bps (ctx : Context.t) ~recent =
   let within time = Time_ns.Span.( < ) (Time_ns.diff ctx.now time) recent in
   List.filter_opt
     [ Option.some_if ctx.session.new_device "new_device"
@@ -270,8 +334,16 @@ let takeover_signals (ctx : Context.t) ~recent =
        | _ -> None)
     ; Option.bind ctx.session.credentials_changed_at ~f:(fun at ->
         Option.some_if (within at) "credentials_changed")
+    ; Option.some_if (ctx.session.failed_sca_24h > 0) "failed_sca"
     ; Option.bind (Context.transfer ctx) ~f:(fun t ->
         Option.some_if (within t.beneficiary.first_seen) "new_beneficiary")
+    ; Option.bind balance_share_bps ~f:(fun bps ->
+        Option.bind (Context.transfer ctx) ~f:(fun t ->
+          let amount = Context.Transfer.amount t in
+          Option.bind
+            (Context.balance ctx (Money.Amount.currency amount))
+            ~f:(fun balance ->
+              Option.some_if (large_share ~amount ~balance ~bps) "large_share_of_balance")))
     ]
 ;;
 
@@ -279,6 +351,7 @@ let account_takeover
   ?(name = "account_takeover")
   ?(severity = Severity.Review)
   ?(min_signals = 2)
+  ?balance_share_bps
   ~recent
   ()
   =
@@ -289,7 +362,7 @@ let account_takeover
       | Card_auth { channel = Online; _ } -> true
       | Card_auth { channel = In_person | Atm; _ } -> false
     in
-    let signals = takeover_signals ctx ~recent in
+    let signals = takeover_signals ?balance_share_bps ctx ~recent in
     Option.some_if
       (remote && List.length signals >= min_signals)
       ( sprintf
@@ -313,14 +386,9 @@ let app_fraud
     match Context.balance ctx (Money.Amount.currency amount) with
     | None -> None
     | Some balance ->
-      let large_share =
-        Money.Amount.is_positive balance
-        && Z.geq
-             (Z.mul (Money.Amount.minor_units amount) (Z.of_int 10_000))
-             (Z.mul (Money.Amount.minor_units balance) (Z.of_int balance_share_bps))
-      in
       Option.some_if
-        (Time_ns.Span.( < ) age new_within && large_share)
+        (Time_ns.Span.( < ) age new_within
+         && large_share ~amount ~balance ~bps:balance_share_bps)
         ( sprintf
             "%s of an available %s to beneficiary %s first seen %s ago"
             (amount_str amount)
@@ -332,6 +400,67 @@ let app_fraud
           ; "beneficiary_age", span_str age
           ; "balance_share_bps", Int.to_string balance_share_bps
           ] ))
+;;
+
+let app_first_large_payment
+  ?(name = "app_first_large_payment")
+  ?(severity = Severity.Review)
+  ~new_within
+  ?(multiple = 5)
+  ()
+  =
+  on_transfer ~name ~severity ~code:App_first_large_payment (fun ctx transfer ->
+    let amount = Context.Transfer.amount transfer in
+    let currency = Money.Amount.currency amount in
+    let earlier =
+      List.filter_map
+        (Context.history_within ctx ~window:(Time_ns.Span.of_day 30.))
+        ~f:(fun p ->
+          Option.some_if
+            (Money.Currency.equal (Money.Amount.currency p.amount) currency)
+            p.amount)
+    in
+    let age = beneficiary_age ctx transfer in
+    match earlier with
+    | [] -> None
+    | _ :: _ when Time_ns.Span.( >= ) age new_within -> None
+    | _ :: _ ->
+      let total = Or_error.ok_exn (Money.Amount.sum currency earlier) in
+      let n = List.length earlier in
+      (* amount > multiple * total / n, compared exactly as amount * n > multiple * total. *)
+      let large =
+        Z.gt
+          (Z.mul (Money.Amount.minor_units amount) (Z.of_int n))
+          (Z.mul (Money.Amount.minor_units total) (Z.of_int multiple))
+      in
+      Option.some_if
+        large
+        ( sprintf
+            "%s to beneficiary %s first seen %s ago is over %dx the 30-day mean of %d \
+             transfers totalling %s"
+            (amount_str amount)
+            (beneficiary_id transfer)
+            (span_str age)
+            multiple
+            n
+            (amount_str total)
+        , [ "amount", amount_str amount
+          ; "transfers_30d", Int.to_string n
+          ; "total_30d", amount_str total
+          ; "multiple", Int.to_string multiple
+          ] ))
+;;
+
+let vop_not_matched ?(name = "vop_not_matched") ?(severity = Severity.Review) () =
+  on_transfer ~name ~severity ~code:Vop_not_matched (fun _ transfer ->
+    match transfer.beneficiary.payee_check with
+    | Some No_match ->
+      Some ("verification of payee: no match", [ "payee_check", "No_match" ])
+    | Some (Close_match { suggested_name }) ->
+      Some
+        ( "verification of payee: close match, holder is " ^ suggested_name
+        , [ "payee_check", "Close_match" ] )
+    | Some (Match | Not_possible) | None -> None)
 ;;
 
 let country_rule ~name ~severity ~code ~label countries =
@@ -397,6 +526,39 @@ let online_toggle ?(name = "online_toggle") ?(severity = Severity.Block) () =
     match auth.channel, auth.online_enabled with
     | Online, false -> Some ("online payments are switched off for this card", [])
     | (Online | In_person | Atm), _ -> None)
+;;
+
+let card_testing
+  ?(name = "card_testing")
+  ?(severity = Severity.Block)
+  ~small
+  ~count
+  ?(max_declines = 3)
+  ~window
+  ()
+  =
+  on_card ~name ~severity ~code:Card_testing (fun ctx auth ->
+    let recent = Context.card_history_within ctx ~window in
+    let currency = Money.Amount.currency auth.amount in
+    let limit, _ = Limits.limit_for small currency in
+    let small_auths =
+      List.count recent ~f:(fun a ->
+        Money.Currency.equal (Money.Amount.currency a.amount) currency
+        && compare_same a.amount limit < 0)
+    in
+    let declines = List.count recent ~f:(fun a -> not a.approved) in
+    Option.some_if
+      (small_auths >= count || declines >= max_declines)
+      ( sprintf
+          "%d authorisations below %s and %d declines in %s"
+          small_auths
+          (amount_str limit)
+          declines
+          (span_str window)
+      , [ "small_auths", Int.to_string small_auths
+        ; "declines", Int.to_string declines
+        ; "window", span_str window
+        ] ))
 ;;
 
 module Thresholds = struct
@@ -489,18 +651,34 @@ let sca_tra
   ?model
   ()
   =
-  make ~name ~severity ~code:Sca_required (fun (ctx : Context.t) ->
-    let applies, trusted =
-      match (scheme : Tra.scheme), ctx.subject with
-      | Credit_transfer, Transfer t -> true, t.beneficiary.trusted
-      | Card_not_present, Card_auth { channel = Online; _ } -> true, false
-      | Credit_transfer, Card_auth _
-      | Card_not_present, Transfer _
-      | Card_not_present, Card_auth { channel = In_person | Atm; _ } -> false, false
+  let outcome ~severity ~code reason evidence =
+    Some { Rule.Outcome.severity; code; reason; evidence }
+  in
+  Rule.create_graded ~name ~max_severity:severity (fun (ctx : Context.t) ->
+    let scheme_evidence =
+      [ "scheme", Sexp.to_string [%sexp (scheme : Tra.scheme)]
+      ; "observed_fraud_rate_ppm", Int.to_string observed_fraud_rate_ppm
+      ]
     in
-    if (not applies) || (trusted_beneficiaries_exempt && trusted)
-    then None
-    else (
+    match (scheme : Tra.scheme), ctx.subject with
+    | Credit_transfer, Card_auth _
+    | Card_not_present, Transfer _
+    | Card_not_present, Card_auth { channel = In_person | Atm; _ } -> None
+    (* Crypto payouts are irreversible and a favourite takeover cash-out: never exempt. *)
+    | Credit_transfer, Transfer { draft = { rail = Onchain _ | Lightning; _ }; _ } ->
+      outcome
+        ~severity
+        ~code:Sca_required
+        "no SCA exemption: crypto payouts always need strong authentication"
+        scheme_evidence
+    | Credit_transfer, Transfer { beneficiary = { trusted = true; _ }; _ }
+      when trusted_beneficiaries_exempt ->
+      outcome
+        ~severity:Allow
+        ~code:Sca_exempt
+        "exempt: trusted beneficiary (RTS article 13)"
+        [ "exemption", "trusted_beneficiary" ]
+    | Credit_transfer, Transfer _ | Card_not_present, Card_auth { channel = Online; _ } ->
       let amount = Context.amount ctx in
       let tra_limit = Tra.threshold scheme ~observed_fraud_rate_ppm in
       let signals = takeover_signals ctx ~recent in
@@ -541,16 +719,24 @@ let sca_tra
                 (sprintf "score %.4f at or above %.4f" score.value max_score))
           ]
       in
-      match blockers with
-      | [] -> None
-      | blockers ->
-        Some
-          ( "no SCA exemption: " ^ String.concat ~sep:"; " blockers
-          , [ "scheme", Sexp.to_string [%sexp (scheme : Tra.scheme)]
-            ; "observed_fraud_rate_ppm", Int.to_string observed_fraud_rate_ppm
-            ; "tra_threshold", Option.value_map tra_limit ~default:"none" ~f:amount_str
-            ]
-            @ List.map signals ~f:(fun s -> "signal", s)
-            @ Option.value_map score ~default:[] ~f:(fun (model, _, s) ->
-              score_evidence model s) )))
+      let evidence =
+        scheme_evidence
+        @ [ "tra_threshold", Option.value_map tra_limit ~default:"none" ~f:amount_str ]
+        @ List.map signals ~f:(fun s -> "signal", s)
+        @ Option.value_map score ~default:[] ~f:(fun (model, _, s) ->
+          score_evidence model s)
+      in
+      (match blockers with
+       | [] ->
+         outcome
+           ~severity:Allow
+           ~code:Sca_exempt
+           "exempt: transaction risk analysis (RTS article 18)"
+           (("exemption", "tra") :: evidence)
+       | blockers ->
+         outcome
+           ~severity
+           ~code:Sca_required
+           ("no SCA exemption: " ^ String.concat ~sep:"; " blockers)
+           evidence))
 ;;

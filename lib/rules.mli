@@ -88,6 +88,29 @@ val mule_pass_through
   -> unit
   -> Context.t Rule.t
 
+(** Money mule fan-in: at least [min_senders] distinct payers within [window] into an
+    account younger than [max_account_age] (unknown opening dates do not count as young).
+    [Mule_fan_in], default [Review]. Evaluated on the customer's outgoing transfers, which
+    is when the money can still be stopped. *)
+val mule_fan_in
+  :  ?name:string
+  -> ?severity:Severity.t
+  -> min_senders:int
+  -> window:Time_ns.Span.t
+  -> max_account_age:Time_ns.Span.t
+  -> unit
+  -> Context.t Rule.t
+
+(** A transfer above [above] from an account opened less than [max_age] ago.
+    [New_account_payout], default [Review]. *)
+val new_account_payout
+  :  ?name:string
+  -> ?severity:Severity.t
+  -> max_age:Time_ns.Span.t
+  -> above:Limits.t
+  -> unit
+  -> Context.t Rule.t
+
 (** Account takeover signals, counted on transfers and online card payments: a new device,
     a request from outside the residence country, credentials changed within [recent], and
     (transfers) a beneficiary first used within [recent]. Triggers at [min_signals] or
@@ -96,6 +119,7 @@ val account_takeover
   :  ?name:string
   -> ?severity:Severity.t
   -> ?min_signals:int
+  -> ?balance_share_bps:int
   -> recent:Time_ns.Span.t
   -> unit
   -> Context.t Rule.t
@@ -111,6 +135,21 @@ val app_fraud
   -> ?balance_share_bps:int
   -> unit
   -> Context.t Rule.t
+
+(** A transfer to a beneficiary first used less than [new_within] ago for more than
+    [multiple] times the customer's mean outgoing amount in that currency over 30 days.
+    Needs at least one earlier transfer. [App_first_large_payment], default [Review]. *)
+val app_first_large_payment
+  :  ?name:string
+  -> ?severity:Severity.t
+  -> new_within:Time_ns.Span.t
+  -> ?multiple:int
+  -> unit
+  -> Context.t Rule.t
+
+(** The beneficiary's verification-of-payee result is [No_match] or [Close_match].
+    [Vop_not_matched], default [Review]; the customer message is a scam warning. *)
+val vop_not_matched : ?name:string -> ?severity:Severity.t -> unit -> Context.t Rule.t
 
 (** {2 Geography} *)
 
@@ -149,6 +188,18 @@ val blocked_mccs : ?name:string -> ?severity:Severity.t -> Mcc.t list -> Context
 (** An online authorisation while the cardholder has online payments switched off.
     [Card_online_disabled], default [Block]. *)
 val online_toggle : ?name:string -> ?severity:Severity.t -> unit -> Context.t Rule.t
+
+(** Card testing: at least [count] earlier authorisations below [small] within [window],
+    or at least [max_declines] declines in it. [Card_testing], default [Block]. *)
+val card_testing
+  :  ?name:string
+  -> ?severity:Severity.t
+  -> small:Limits.t
+  -> count:int
+  -> ?max_declines:int
+  -> window:Time_ns.Span.t
+  -> unit
+  -> Context.t Rule.t
 
 (** {2 Model scores} *)
 
