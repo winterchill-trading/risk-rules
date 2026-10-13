@@ -25,9 +25,46 @@ let pool =
   ; Online_toggle
   ; Severity (Review, Per_transfer_cap (l [ eur "50.00" ]))
   ; Severity (Allow, Velocity { max_count = 1; window = hours 24 })
+  ; Mule_pass_through
+      { window = hours 24; min_incoming = l [ eur "10.00" ]; ratio_bps = 8_000 }
+  ; Account_takeover
+      { recent = hours 24; min_signals = 1; balance_share_bps = Some 5_000 }
+  ; App_fraud { new_within = hours 48; balance_share_bps = 5_000 }
+  ; App_first_large_payment { new_within = hours 48; multiple = 2 }
+  ; Sca_tra
+      { scheme = Credit_transfer
+      ; observed_fraud_rate_ppm = 40
+      ; trusted_beneficiaries_exempt = true
+      ; recent = hours 24
+      ; model = Some "m"
+      ; max_score = 0.5
+      }
+  ; Score
+      { model = "m"
+      ; thresholds =
+          { challenge_at = Some 0.3; review_at = Some 0.6; block_at = Some 0.9 }
+      }
+  ; Shadow (Per_transfer_cap (l [ eur "1.00" ]))
+  ; Score
+      { model = "missing"
+      ; thresholds = { challenge_at = None; review_at = Some 0.5; block_at = None }
+      }
   ]
 ;;
 
+(* A model whose score depends on the features, so the properties see every threshold
+   band. *)
+let model =
+  Model.logistic
+    ~name:"m"
+    ~version:"test"
+    ~intercept:(-2.)
+    ~weights:[ "amount_to_balance", 4.; "out_count_24h", 0.5 ]
+    ()
+  |> Or_error.ok_exn
+;;
+
+let to_rule = Rule_spec.to_rule ~models:[ model ]
 let gen_spec = Quickcheck.Generator.of_list pool
 
 let gen_amount =
@@ -69,9 +106,9 @@ let%test_unit "adding a built-in rule never lowers the decision" =
     ~sexp_of:[%sexp_of: Rule_spec.t list * Rule_spec.t * Context.t]
     (Quickcheck.Generator.tuple3 (List.gen_with_length 3 gen_spec) gen_spec gen_context)
     ~f:(fun (specs, extra, ctx) ->
-      let rules = List.map specs ~f:Rule_spec.to_rule in
+      let rules = List.map specs ~f:to_rule in
       let before = Engine.evaluate rules ctx in
-      let after = Engine.evaluate (rules @ [ Rule_spec.to_rule extra ]) ctx in
+      let after = Engine.evaluate (rules @ [ to_rule extra ]) ctx in
       [%test_pred: Severity.t * Severity.t]
         (fun (b, a) -> Severity.( >= ) a b)
         (before.severity, after.severity))
@@ -79,7 +116,7 @@ let%test_unit "adding a built-in rule never lowers the decision" =
 
 let%test_unit "decision severity is the worst hit" =
   Quickcheck.test ~trials:500 ~sexp_of:[%sexp_of: Context.t] gen_context ~f:(fun ctx ->
-    let d = Engine.evaluate (List.map pool ~f:Rule_spec.to_rule) ctx in
+    let d = Engine.evaluate (List.map pool ~f:to_rule) ctx in
     let worst =
       List.fold d.hits ~init:Severity.Allow ~f:(fun acc hit ->
         Severity.worst acc hit.severity)
