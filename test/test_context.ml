@@ -48,6 +48,7 @@ let%expect_test "past transfers count while live, not once failed" =
   let ok = Or_error.ok_exn in
   let d = draft (eur "40.00") in
   let at m = Time_ns.add t0 (minutes m) in
+  let d = ok (Payments_core.Transfer.exempt d ~exemption:Trusted_beneficiary) in
   let submitted = ok (Payments_core.Transfer.submit d ~at:(at 1) ()) in
   let failed =
     ok
@@ -104,5 +105,5 @@ let%expect_test "context round trips and digest" =
          (module Context.Stable.V1)
          (Binable.to_string (module Context.Stable.V1) ctx)));
   print_endline [%bin_digest: Context.Stable.V1.t];
-  [%expect {| 350beefa7795e4b994cd52ba46ccd8e6 |}]
+  [%expect {| f8a0884bbaaaf6b8f3f824ea09e49efd |}]
 ;;

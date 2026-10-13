@@ -26,7 +26,7 @@
          (remittance (Unstructured test)) (charge_bearer SLEV) (purpose ())
          (requested_execution_date ()) (acceptance_time ()) (value_date ())
          (booking_date ()) (last_status ()))))
-      (status Draft) (history ((Draft "2026-10-13 12:00:00Z"))) (sca ())
+      (status Draft) (history ((Draft "2026-10-13 12:00:00Z"))) (authorization ())
       (provider_ref ())))
     (beneficiary
      ((id ben-1) (owner cust-1) (name "Test Payee")
