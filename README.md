@@ -84,6 +84,7 @@ Engine.evaluate
 | `Limits` | one threshold per currency; a missing currency is a limit of zero |
 | `Rules` | built-in rules (table below) |
 | `Rule_spec`, `Policy` | built-in rules as sexp data; tier to rule set table; models looked up by name |
+| `Sca_outcome` | a decision's SCA verdict as `Required`, `Exempt of Payments_core.Sca.Exemption.t` or `Not_assessed`, ready for `Transfer.require_sca` / `Transfer.exempt` |
 | `Review_queue` | immutable queue of held operations with `decide` and `annotate` |
 | `Tier`, `Country`, `Mcc` | validated identifiers |
 
@@ -178,7 +179,10 @@ risk-rules reason-codes                                 # code, typology, descri
 `Severity`, `Reason_code`, `Typology`, `Hit`, `Decision`, `Tier`, `Country`,
 `Mcc`, `Context`, `Features` and `Review_queue` have `Stable.V1` bin_io
 types with their digests pinned in the expect tests. `Decision.t` is
-private and re-derives its severity from its hits on read. Tests: expect
+private and re-derives its severity from its hits on read. `Context.Stable.V1`
+embeds payments-core's stable transfer and beneficiary types, so its pinned
+digest moves when those do; that test failing is the signal to re-check
+journaled contexts. Tests: expect
 tests per rule with evidence, policy loading and refusals, the example
 files, the reason code catalogue, features and their JSON export, and
 Quickcheck properties that adding a rule (generic or built-in) never lowers
