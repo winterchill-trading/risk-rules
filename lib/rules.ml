@@ -24,12 +24,14 @@ let on_card ~name ~severity f =
 
 let per_transfer_cap ?(name = "per_transfer_cap") ?(severity = Severity.Block) limits =
   on_transfer ~name ~severity (fun _ (transfer : Context.Transfer.t) ->
-    let limit, note = Limits.limit_for limits (Money.Amount.currency transfer.amount) in
+    let limit, note =
+      Limits.limit_for limits (Money.Amount.currency (Context.Transfer.amount transfer))
+    in
     Option.some_if
-      (exceeds transfer.amount ~limit)
+      (exceeds (Context.Transfer.amount transfer) ~limit)
       (sprintf
          "%s exceeds the per-transfer cap of %s%s"
-         (amount_str transfer.amount)
+         (amount_str (Context.Transfer.amount transfer))
          (amount_str limit)
          note))
 ;;
@@ -47,14 +49,16 @@ let same_currency_total (ctx : Context.t) ~window amount =
 
 let window_cap ~name ?(severity = Severity.Block) ~window limits =
   on_transfer ~name ~severity (fun ctx (transfer : Context.Transfer.t) ->
-    let limit, note = Limits.limit_for limits (Money.Amount.currency transfer.amount) in
-    let before = same_currency_total ctx ~window transfer.amount in
-    let total = Money.Amount.add_exn before transfer.amount in
+    let limit, note =
+      Limits.limit_for limits (Money.Amount.currency (Context.Transfer.amount transfer))
+    in
+    let before = same_currency_total ctx ~window (Context.Transfer.amount transfer) in
+    let total = Money.Amount.add_exn before (Context.Transfer.amount transfer) in
     Option.some_if
       (exceeds total ~limit)
       (sprintf
          "%s plus %s already sent in %s exceeds the cap of %s%s"
-         (amount_str transfer.amount)
+         (amount_str (Context.Transfer.amount transfer))
          (amount_str before)
          (span_str window)
          (amount_str limit)
@@ -89,18 +93,21 @@ let new_beneficiary_cooldown
   =
   on_transfer ~name ~severity (fun (ctx : Context.t) (transfer : Context.Transfer.t) ->
     let beneficiary = transfer.beneficiary in
+    let beneficiary_id = Payments_core.Beneficiary.Id.to_string beneficiary.id in
     let age = Time_ns.diff ctx.now beneficiary.first_seen in
     let in_cooldown = Time_ns.Span.( < ) age cooldown in
-    let limit, note = Limits.limit_for above (Money.Amount.currency transfer.amount) in
+    let limit, note =
+      Limits.limit_for above (Money.Amount.currency (Context.Transfer.amount transfer))
+    in
     if in_cooldown
-       && exceeds transfer.amount ~limit
+       && exceeds (Context.Transfer.amount transfer) ~limit
        && not (exempt_trusted && beneficiary.trusted)
     then
       Some
         (sprintf
            "%s to beneficiary %s first seen %s ago; above %s during the %s cooldown%s"
-           (amount_str transfer.amount)
-           beneficiary.id
+           (amount_str (Context.Transfer.amount transfer))
+           beneficiary_id
            (span_str (Time_ns.Span.max age Time_ns.Span.zero))
            (amount_str limit)
            (span_str cooldown)
@@ -119,7 +126,7 @@ let structuring
   ()
   =
   on_transfer ~name ~severity (fun ctx (transfer : Context.Transfer.t) ->
-    let currency = Money.Amount.currency transfer.amount in
+    let currency = Money.Amount.currency (Context.Transfer.amount transfer) in
     (* Unlike the caps, a missing currency switches the matching half of the heuristic
        off: "just below zero" and "a multiple of zero" mean nothing, and flagging every
        amount would bury real cases. *)
@@ -146,7 +153,7 @@ let structuring
       Money.Currency.equal (Money.Amount.currency amount) currency
       && (is_round amount || just_below amount)
     in
-    if not (suspicious transfer.amount)
+    if not (suspicious (Context.Transfer.amount transfer))
     then None
     else (
       let earlier =
@@ -160,7 +167,7 @@ let structuring
            "%d round or just-below-threshold transfers in %s (this one %s)"
            count
            (span_str window)
-           (amount_str transfer.amount))))
+           (amount_str (Context.Transfer.amount transfer)))))
 ;;
 
 let country_rule ~name ~severity ~label countries =
@@ -195,15 +202,17 @@ let unverified_self_hosted_wallet
   ()
   =
   on_transfer ~name ~severity (fun _ (transfer : Context.Transfer.t) ->
-    match transfer.beneficiary.wallet with
+    match transfer.wallet with
     | Some { self_hosted = true; ownership_verified = false } ->
-      let limit, note = Limits.limit_for above (Money.Amount.currency transfer.amount) in
+      let limit, note =
+        Limits.limit_for above (Money.Amount.currency (Context.Transfer.amount transfer))
+      in
       Option.some_if
-        (exceeds transfer.amount ~limit)
+        (exceeds (Context.Transfer.amount transfer) ~limit)
         (sprintf
            "%s to an unverified self-hosted wallet above %s%s: collect travel-rule \
             originator and beneficiary information or proof of ownership"
-           (amount_str transfer.amount)
+           (amount_str (Context.Transfer.amount transfer))
            (amount_str limit)
            note)
     | Some _ | None -> None)

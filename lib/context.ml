@@ -8,34 +8,68 @@ module Wallet = struct
   [@@deriving bin_io, sexp, compare, equal]
 end
 
-module Beneficiary = struct
+module Transfer = struct
   type t =
-    { id : string
-    ; country : Country.t option
-    ; first_seen : Time_ns.Alternate_sexp.t
-    ; trusted : bool
+    { draft : Payments_core.Transfer.Stable.V1.t
+    ; beneficiary : Payments_core.Beneficiary.Stable.V1.t
+    ; beneficiary_country : Country.t option
     ; wallet : Wallet.t option
     }
   [@@deriving bin_io, sexp, compare, equal]
-end
 
-module Transfer = struct
-  type t =
-    { id : string
-    ; amount : Money.Amount.Stable.V1.t
-    ; rail : Payments_core.Rail.Stable.V1.t
-    ; beneficiary : Beneficiary.t
-    }
-  [@@deriving bin_io, sexp, compare, equal]
+  let default_country (beneficiary : Payments_core.Beneficiary.t) =
+    match beneficiary.destination with
+    | Bank_account { iban; bic = _ } ->
+      Country.of_string_or_error (Payments_core.Iban.country iban) |> Result.ok
+    | Crypto _ | Lightning _ | Internal _ -> None
+  ;;
+
+  let create ?country ?wallet (draft : Payments_core.Transfer.t) =
+    match draft.direction, draft.counterparty with
+    | Out, Beneficiary beneficiary ->
+      let beneficiary_country =
+        match country with
+        | Some _ -> country
+        | None -> default_country beneficiary
+      in
+      Ok { draft; beneficiary; beneficiary_country; wallet }
+    | In, _ | Out, External _ ->
+      Or_error.error_s
+        [%message
+          "context: expected an outgoing transfer to a beneficiary"
+            ~transfer:(draft.id : Payments_core.Transfer.Id.t)]
+  ;;
+
+  let amount t = t.draft.amount
 end
 
 module Past_transfer = struct
   type t =
     { at : Time_ns.Alternate_sexp.t
     ; amount : Money.Amount.Stable.V1.t
-    ; beneficiary_id : string
+    ; beneficiary : Payments_core.Beneficiary.Id.Stable.V1.t option
     }
   [@@deriving bin_io, sexp, compare, equal]
+
+  let of_transfer (transfer : Payments_core.Transfer.t) =
+    (* Transfers still waiting for strong authentication count: otherwise a customer could
+       queue many unconfirmed transfers that each pass the cap alone and confirm them
+       together. *)
+    let counts =
+      match transfer.status with
+      | Awaiting_sca | Submitted | Pending | Settled -> true
+      | Draft | Failed _ | Returned | Cancelled -> false
+    in
+    match transfer.direction, counts, List.last transfer.history with
+    | Out, true, Some (_, at) ->
+      let beneficiary =
+        match transfer.counterparty with
+        | Beneficiary b -> Some b.id
+        | External _ -> None
+      in
+      Some { at; amount = transfer.amount; beneficiary }
+    | (In | Out), _, _ -> None
+  ;;
 end
 
 module Card_auth = struct
@@ -94,7 +128,7 @@ end
 
 let amount t =
   match t.subject with
-  | Transfer transfer -> transfer.amount
+  | Transfer transfer -> Transfer.amount transfer
   | Card_auth auth -> auth.amount
 ;;
 
@@ -124,7 +158,7 @@ let history_within t ~window =
 let countries t =
   let counterparty =
     match t.subject with
-    | Transfer transfer -> transfer.beneficiary.country
+    | Transfer transfer -> transfer.beneficiary_country
     | Card_auth auth -> auth.merchant_country
   in
   List.stable_dedup

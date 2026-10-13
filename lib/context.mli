@@ -17,26 +17,30 @@ module Wallet : sig
   [@@deriving bin_io, sexp, compare, equal]
 end
 
-module Beneficiary : sig
-  type t =
-    { id : string
-    ; country : Country.t option (** bank or wallet provider country, when known *)
-    ; first_seen : Time_ns.Alternate_sexp.t (** first time the customer used it *)
-    ; trusted : bool (** confirmed by the customer with strong authentication *)
+module Transfer : sig
+  (** The outgoing transfer being decided, with the facts about its beneficiary that
+      payments-core does not hold. Built with {!create}, which keeps [beneficiary] equal
+      to the draft's counterparty. *)
+  type t = private
+    { draft : Payments_core.Transfer.Stable.V1.t
+    ; beneficiary : Payments_core.Beneficiary.Stable.V1.t
+    ; beneficiary_country : Country.t option
+    (** bank or wallet provider country, when known *)
     ; wallet : Wallet.t option (** [Some] for crypto destinations *)
     }
   [@@deriving bin_io, sexp, compare, equal]
-end
 
-module Transfer : sig
-  (** The outgoing transfer being decided. *)
-  type t =
-    { id : string
-    ; amount : Money.Amount.Stable.V1.t
-    ; rail : Payments_core.Rail.Stable.V1.t
-    ; beneficiary : Beneficiary.t
-    }
-  [@@deriving bin_io, sexp, compare, equal]
+  (** Fails unless the draft is outgoing to a beneficiary. [country] defaults to the
+      IBAN's country for bank accounts and is [None] otherwise. *)
+  val create
+    :  ?country:Country.t
+    -> ?wallet:Wallet.t
+    -> Payments_core.Transfer.t
+    -> t Or_error.t
+
+  (** What the beneficiary receives, fee excluded: limits are about money sent, and a fee
+      change should not move a customer across a cap. *)
+  val amount : t -> Money.Amount.t
 end
 
 module Past_transfer : sig
@@ -45,9 +49,14 @@ module Past_transfer : sig
   type t =
     { at : Time_ns.Alternate_sexp.t
     ; amount : Money.Amount.Stable.V1.t
-    ; beneficiary_id : string
+    ; beneficiary : Payments_core.Beneficiary.Id.Stable.V1.t option
     }
   [@@deriving bin_io, sexp, compare, equal]
+
+  (** Summarises a payments-core transfer: [None] for incoming transfers and for drafts,
+      failed, cancelled and returned ones, which moved no money. [at] is when it was
+      created (its oldest history entry). *)
+  val of_transfer : Payments_core.Transfer.t -> t option
 end
 
 module Card_auth : sig
