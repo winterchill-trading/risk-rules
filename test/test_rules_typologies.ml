@@ -201,7 +201,7 @@ let%expect_test "SCA unless an exemption applies" =
   [%expect
     {|
     allow SCA_EXEMPT: exempt: transaction risk analysis (RTS article 18)
-      exemption=tra
+      exemption=(Tra(band Eur_250)(score 0))
       scheme=Credit_transfer
       observed_fraud_rate_ppm=90
       tra_threshold=250.00 EUR
@@ -210,7 +210,7 @@ let%expect_test "SCA unless an exemption applies" =
       observed_fraud_rate_ppm=90
       tra_threshold=250.00 EUR
     allow SCA_EXEMPT: exempt: trusted beneficiary (RTS article 13)
-      exemption=trusted_beneficiary
+      exemption=Trusted_beneficiary
     challenge SCA_REQUIRED: no SCA exemption: risk signals: new_device
       scheme=Credit_transfer
       observed_fraud_rate_ppm=90
@@ -242,7 +242,7 @@ let%expect_test "SCA unless an exemption applies" =
       model_version=constant
       score=0.7000
     allow SCA_EXEMPT: exempt: transaction risk analysis (RTS article 18)
-      exemption=tra
+      exemption=(Tra(band Eur_100)(score 0))
       scheme=Card_not_present
       observed_fraud_rate_ppm=700
       tra_threshold=100.00 EUR
@@ -252,4 +252,46 @@ let%expect_test "SCA unless an exemption applies" =
       tra_threshold=100.00 EUR
     -
     |}]
+;;
+
+let%expect_test "SCA outcome in payments-core terms" =
+  let rules =
+    [ Rules.sca_tra ~scheme:Credit_transfer ~observed_fraud_rate_ppm:90 ()
+    ; Rules.velocity ~max_count:100 ~window:(hours 1) ()
+    ]
+  in
+  let outcome ctx =
+    print_s [%sexp (Sca_outcome.of_decision (Engine.evaluate rules ctx) : Sca_outcome.t)]
+  in
+  let untrusted = beneficiary ~trusted:false () in
+  outcome (context (transfer ~beneficiary:untrusted (eur "200.00")));
+  outcome (context (transfer (eur "200.00")));
+  outcome (context (transfer ~beneficiary:untrusted (eur "300.00")));
+  outcome (context (card (eur "300.00")));
+  [%expect
+    {|
+    (Exempt (Tra (band Eur_250) (score 0)))
+    (Exempt Trusted_beneficiary)
+    (Required
+     (reasons
+      ("no SCA exemption: 300.00 EUR is above the 250.00 EUR exemption threshold")))
+    Not_assessed
+    |}];
+  (* The exemption can be recorded on the draft as is. *)
+  match
+    Sca_outcome.of_decision
+      (Engine.evaluate rules (context (transfer ~beneficiary:untrusted (eur "200.00"))))
+  with
+  | Exempt exemption ->
+    let d =
+      Payments_core.Transfer.exempt
+        (draft ~beneficiary:untrusted (eur "200.00"))
+        ~exemption
+    in
+    print_s
+      [%sexp
+        (Or_error.map d ~f:(fun t -> t.authorization)
+         : Payments_core.Sca.Authorization.t option Or_error.t)];
+    [%expect {| (Ok ((Exempt (Tra (band Eur_250) (score 0))))) |}]
+  | Required _ | Not_assessed -> assert false
 ;;
