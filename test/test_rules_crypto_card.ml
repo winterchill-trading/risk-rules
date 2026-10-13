@@ -9,7 +9,10 @@ let%expect_test "self-hosted wallet travel-rule hook" =
   let to_wallet ~self_hosted ~ownership_verified amount =
     transfer
       ~beneficiary:(wallet_beneficiary ())
-      ~wallet:{ Context.Wallet.self_hosted; ownership_verified }
+      ~wallet:
+        (if self_hosted
+         then Self_hosted { ownership_verified }
+         else Hosted { provider_name = "Exchange"; provider_lei = None })
       amount
   in
   check

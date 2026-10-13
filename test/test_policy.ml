@@ -26,12 +26,12 @@ let%expect_test "tiers get different caps" =
   [%expect
     {|
     block
-      per_transfer_cap [block] 1500.00 EUR exceeds the per-transfer cap of 1000.00 EUR
+      per_transfer_cap [block] LIMIT_PER_TRANSFER: 1500.00 EUR exceeds the per-transfer cap of 1000.00 EUR
     allow
     review
-      manual_review [review] customer under investigation
+      manual_review [review] MANUAL_REVIEW: customer under investigation
     block
-      unknown_tier [block] no rules for tier vip
+      unknown_tier [block] UNKNOWN_TIER: no rules for tier vip
     |}]
 ;;
 
@@ -48,11 +48,11 @@ let%expect_test "all-tier rules apply to every tier" =
   [%expect
     {|
     block
-      high_risk_country [review] high-risk country: PA
-      new_beneficiary_cooldown [block] 5000.00 EUR to beneficiary ben-1 first seen 1h ago; above 250.00 EUR during the 1d cooldown
+      high_risk_country [review] GEO_HIGH_RISK: high-risk country: PA
+      new_beneficiary_cooldown [block] NEW_BENEFICIARY_COOLDOWN: 5000.00 EUR to beneficiary ben-1 first seen 1h ago; above 250.00 EUR during the 1d cooldown
     block
-      blocked_mcc [block] merchant category 7995 is blocked
-      online_toggle [block] online payments are switched off for this card
+      blocked_mcc [block] CARD_MCC_BLOCKED: merchant category 7995 is blocked
+      online_toggle [block] CARD_ONLINE_DISABLED: online payments are switched off for this card
     |}]
 ;;
 
@@ -73,9 +73,9 @@ let%expect_test "severity override" =
   [%expect
     {|
     review
-      per_transfer_cap [review] 200.00 EUR exceeds the per-transfer cap of 100.00 EUR
+      per_transfer_cap [review] LIMIT_PER_TRANSFER: 200.00 EUR exceeds the per-transfer cap of 100.00 EUR
     block
-      online_toggle [block] online payments are switched off for this card
+      online_toggle [block] CARD_ONLINE_DISABLED: online payments are switched off for this card
     |}]
 ;;
 
