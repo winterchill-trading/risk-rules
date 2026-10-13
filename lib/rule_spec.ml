@@ -33,10 +33,31 @@ type t =
   | Account_takeover of
       { recent : Time_ns.Span.t
       ; min_signals : int [@default 2]
+      ; balance_share_bps : int option [@sexp.option]
       }
   | App_fraud of
       { new_within : Time_ns.Span.t
       ; balance_share_bps : int [@default 8_000]
+      }
+  | Mule_fan_in of
+      { min_senders : int
+      ; window : Time_ns.Span.t
+      ; max_account_age : Time_ns.Span.t
+      }
+  | New_account_payout of
+      { max_age : Time_ns.Span.t
+      ; above : Limits.t
+      }
+  | App_first_large_payment of
+      { new_within : Time_ns.Span.t
+      ; multiple : int [@default 5]
+      }
+  | Vop_not_matched
+  | Card_testing of
+      { small : Limits.t
+      ; count : int
+      ; max_declines : int [@default 3]
+      ; window : Time_ns.Span.t
       }
   | Score of
       { model : string
@@ -57,6 +78,7 @@ type t =
   | Online_toggle
   | Manual_review of { reason : string }
   | Severity of Severity.t * t
+  | Shadow of t
 [@@deriving sexp, compare, equal]
 
 let positive_span what span =
@@ -105,13 +127,30 @@ let rec validate = function
   | Mule_pass_through { window; ratio_bps; min_incoming = _ } ->
     Or_error.combine_errors_unit
       [ positive_span "window" window; positive_int "ratio_bps" ratio_bps ]
-  | Account_takeover { recent; min_signals } ->
+  | Account_takeover { recent; min_signals; balance_share_bps = _ } ->
     Or_error.combine_errors_unit
       [ positive_span "recent" recent; positive_int "min_signals" min_signals ]
   | App_fraud { new_within; balance_share_bps } ->
     Or_error.combine_errors_unit
       [ positive_span "new_within" new_within
       ; positive_int "balance_share_bps" balance_share_bps
+      ]
+  | Mule_fan_in { min_senders; window; max_account_age } ->
+    Or_error.combine_errors_unit
+      [ positive_int "min_senders" min_senders
+      ; positive_span "window" window
+      ; positive_span "max_account_age" max_account_age
+      ]
+  | New_account_payout { max_age; above = _ } -> positive_span "max_age" max_age
+  | App_first_large_payment { new_within; multiple } ->
+    Or_error.combine_errors_unit
+      [ positive_span "new_within" new_within; positive_int "multiple" multiple ]
+  | Vop_not_matched -> Ok ()
+  | Card_testing { count; max_declines; window; small = _ } ->
+    Or_error.combine_errors_unit
+      [ positive_int "count" count
+      ; positive_int "max_declines" max_declines
+      ; positive_span "window" window
       ]
   | Score { thresholds; model = _ } -> Rules.Thresholds.validate thresholds
   | Sca_tra
@@ -131,13 +170,13 @@ let rec validate = function
          then Ok ()
          else Or_error.error_string "rule spec: max_score outside [0, 1]")
       ]
-  | Severity (_, spec) -> validate spec
+  | Severity (_, spec) | Shadow spec -> validate spec
 ;;
 
 let rec models = function
   | Score { model; _ } -> [ model ]
   | Sca_tra { model; _ } -> Option.to_list model
-  | Severity (_, spec) -> models spec
+  | Severity (_, spec) | Shadow spec -> models spec
   | _ -> []
 ;;
 
@@ -171,15 +210,27 @@ let rec to_rule_with ~models ?severity = function
   | Online_toggle -> Rules.online_toggle ?severity ()
   | Mule_pass_through { window; min_incoming; ratio_bps } ->
     Rules.mule_pass_through ?severity ~window ~min_incoming ~ratio_bps ()
-  | Account_takeover { recent; min_signals } ->
-    Rules.account_takeover ?severity ~recent ~min_signals ()
+  | Account_takeover { recent; min_signals; balance_share_bps } ->
+    Rules.account_takeover ?severity ~recent ~min_signals ?balance_share_bps ()
+  | Mule_fan_in { min_senders; window; max_account_age } ->
+    Rules.mule_fan_in ?severity ~min_senders ~window ~max_account_age ()
+  | New_account_payout { max_age; above } ->
+    Rules.new_account_payout ?severity ~max_age ~above ()
+  | App_first_large_payment { new_within; multiple } ->
+    Rules.app_first_large_payment ?severity ~new_within ~multiple ()
+  | Vop_not_matched -> Rules.vop_not_matched ?severity ()
+  | Card_testing { small; count; max_declines; window } ->
+    Rules.card_testing ?severity ~small ~count ~max_declines ~window ()
   | App_fraud { new_within; balance_share_bps } ->
     Rules.app_fraud ?severity ~new_within ~balance_share_bps ()
   | Score { model; thresholds } ->
-    (* Severity overrides do not apply: the thresholds pick the severity. *)
-    (match find_model models model with
-     | Some m -> Rules.model_score m thresholds
-     | None -> unavailable ~name:"model_score" model)
+    (* The thresholds pick the severity; an override caps it. *)
+    let rule =
+      match find_model models model with
+      | Some m -> Rules.model_score m thresholds
+      | None -> unavailable ~name:"model_score" model
+    in
+    Option.value_map severity ~default:rule ~f:(fun max -> Rule.cap rule ~max)
   | Sca_tra
       { scheme
       ; observed_fraud_rate_ppm
@@ -210,6 +261,7 @@ let rec to_rule_with ~models ?severity = function
       ~code:Manual_review
       ~reason
   (* The outermost override wins: [(Severity Block (Severity Review x))] is [Block]. *)
+  | Shadow spec -> Rule.cap (to_rule_with ~models ?severity spec) ~max:Allow
   | Severity (outer, spec) ->
     to_rule_with ~models ~severity:(Option.value severity ~default:outer) spec
 ;;

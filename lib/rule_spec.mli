@@ -8,7 +8,9 @@
       (Sca_tra (scheme Credit_transfer) (observed_fraud_rate_ppm 40))
     v}
 
-    [Severity] overrides the default severity of the spec it wraps. *)
+    [Severity] overrides the default severity of the spec it wraps (for graded rules,
+    scores and SCA, it caps it). [Shadow] runs a spec with its hits capped at [Allow]:
+    logged for evaluation, no effect on the decision. *)
 
 open! Core
 
@@ -45,10 +47,31 @@ type t =
   | Account_takeover of
       { recent : Time_ns.Span.t
       ; min_signals : int [@default 2]
+      ; balance_share_bps : int option [@sexp.option]
       }
   | App_fraud of
       { new_within : Time_ns.Span.t
       ; balance_share_bps : int [@default 8_000]
+      }
+  | Mule_fan_in of
+      { min_senders : int
+      ; window : Time_ns.Span.t
+      ; max_account_age : Time_ns.Span.t
+      }
+  | New_account_payout of
+      { max_age : Time_ns.Span.t
+      ; above : Limits.t
+      }
+  | App_first_large_payment of
+      { new_within : Time_ns.Span.t
+      ; multiple : int [@default 5]
+      }
+  | Vop_not_matched
+  | Card_testing of
+      { small : Limits.t
+      ; count : int
+      ; max_declines : int [@default 3]
+      ; window : Time_ns.Span.t
       }
   | Score of
       { model : string (** looked up by {!Model.name} *)
@@ -70,6 +93,7 @@ type t =
   | Manual_review of { reason : string }
   (** Every operation goes to review, e.g. for a tier under investigation. *)
   | Severity of Severity.t * t
+  | Shadow of t
 [@@deriving sexp, compare, equal]
 
 (** Range checks that sexp parsing cannot express (positive counts and windows, a margin
