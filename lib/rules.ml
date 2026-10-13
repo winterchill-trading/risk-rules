@@ -641,6 +641,14 @@ module Tra = struct
   ;;
 end
 
+(* The exemption travels as its payments-core sexp so {!Sca_outcome} can read it back
+   exactly. *)
+let exemption_key = "exemption"
+
+let exemption_evidence (e : Payments_core.Sca.Exemption.t) =
+  exemption_key, Sexp.to_string [%sexp (e : Payments_core.Sca.Exemption.t)]
+;;
+
 let sca_tra
   ?(name = "sca_tra")
   ?(severity = Severity.Challenge)
@@ -677,7 +685,7 @@ let sca_tra
         ~severity:Allow
         ~code:Sca_exempt
         "exempt: trusted beneficiary (RTS article 13)"
-        [ "exemption", "trusted_beneficiary" ]
+        [ exemption_evidence Trusted_beneficiary ]
     | Credit_transfer, Transfer _ | Card_not_present, Card_auth { channel = Online; _ } ->
       let amount = Context.amount ctx in
       let tra_limit = Tra.threshold scheme ~observed_fraud_rate_ppm in
@@ -726,14 +734,28 @@ let sca_tra
         @ Option.value_map score ~default:[] ~f:(fun (model, _, s) ->
           score_evidence model s)
       in
-      (match blockers with
-       | [] ->
+      (match blockers, tra_limit with
+       | [], Some limit ->
+         let band : Payments_core.Sca.Exemption.Etv.t =
+           if exceeds limit ~limit:(Tra.eur "250.00")
+           then Eur_500
+           else if exceeds limit ~limit:(Tra.eur "100.00")
+           then Eur_250
+           else Eur_100
+         in
+         (* payments-core keeps the TRA score as an int; we store the model score in
+            thousandths (0 when the policy names no model). *)
+         let score =
+           Option.value_map score ~default:0 ~f:(fun (_, _, (s : Model.Score.t)) ->
+             Float.iround_nearest_exn (s.value *. 1000.))
+         in
          outcome
            ~severity:Allow
            ~code:Sca_exempt
            "exempt: transaction risk analysis (RTS article 18)"
-           (("exemption", "tra") :: evidence)
-       | blockers ->
+           (exemption_evidence (Tra { band; score }) :: evidence)
+       (* [[], None] cannot happen: a missing threshold is itself a blocker. *)
+       | blockers, _ ->
          outcome
            ~severity
            ~code:Sca_required

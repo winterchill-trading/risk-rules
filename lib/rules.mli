@@ -247,6 +247,10 @@ end
     counts them with [recent]) and, when a model is given, scores below [max_score].
     In-person and ATM card payments are not remote; the rule ignores them (the card's own
     authentication applies). *)
+(** Evidence key under which [Sca_exempt] hits store the
+    [Payments_core.Sca.Exemption.t] (as its sexp). *)
+val exemption_key : string
+
 val sca_tra
   :  ?name:string
   -> ?severity:Severity.t
