@@ -50,6 +50,9 @@ module Past_transfer : sig
     { at : Time_ns.Alternate_sexp.t
     ; amount : Money.Amount.Stable.V1.t
     ; beneficiary : Payments_core.Beneficiary.Id.Stable.V1.t option
+    ; sender : string option
+    (** incoming only: a stable key for the payer (e.g. a hash of the IBAN or address),
+        for fan-in counts *)
     }
   [@@deriving bin_io, sexp, compare, equal]
 
@@ -59,8 +62,9 @@ module Past_transfer : sig
   val of_transfer : Payments_core.Transfer.t -> t option
 
   (** Summarises an incoming transfer that reached the account (pending or settled);
-      [None] otherwise. [beneficiary] is [None]. *)
-  val of_incoming : Payments_core.Transfer.t -> t option
+      [None] otherwise. [beneficiary] is [None]; [sender] is the counterparty's reported
+      detail (IBAN, address or invoice) passed through [sender_key], e.g. a hash. *)
+  val of_incoming : ?sender_key:(string -> string) -> Payments_core.Transfer.t -> t option
 end
 
 module Card_auth : sig
@@ -84,6 +88,17 @@ module Card_auth : sig
   [@@deriving bin_io, sexp, compare, equal]
 end
 
+module Past_auth : sig
+  (** An earlier card authorisation on the same card, for card-testing detection. *)
+  type t =
+    { at : Time_ns.Alternate_sexp.t
+    ; amount : Money.Amount.Stable.V1.t
+    ; merchant : string
+    ; approved : bool
+    }
+  [@@deriving bin_io, sexp, compare, equal]
+end
+
 module Geo : sig
   type t =
     { ip_country : Country.t option (** where the request came from *)
@@ -102,6 +117,7 @@ module Session : sig
     ; credentials_changed_at : Time_ns.Alternate_sexp.t option
     (** last password, phone or e-mail change *)
     ; account_opened_at : Time_ns.Alternate_sexp.t option
+    ; failed_sca_24h : int (** failed strong authentication attempts, last 24 hours *)
     }
   [@@deriving bin_io, sexp, compare, equal]
 
@@ -124,6 +140,7 @@ type t =
   ; subject : Subject.t
   ; history : Past_transfer.t list (** outgoing, any order; rules filter by time *)
   ; incoming : Past_transfer.t list (** credits received, any order *)
+  ; card_history : Past_auth.t list (** earlier authorisations on the card, any order *)
   ; geo : Geo.t
   ; session : Session.t
   }
@@ -143,6 +160,9 @@ val card_auth : t -> Card_auth.t option
 
 (** Available balance in a currency, if the customer holds one. *)
 val balance : t -> Money.Currency.t -> Money.Amount.t option
+
+(** Card authorisations with [now - window < at <= now]. *)
+val card_history_within : t -> window:Time_ns.Span.t -> Past_auth.t list
 
 (** Incoming transfers with [now - window < at <= now]. *)
 val incoming_within : t -> window:Time_ns.Span.t -> Past_transfer.t list

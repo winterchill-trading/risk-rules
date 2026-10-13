@@ -65,6 +65,7 @@ module Past_transfer = struct
     { at : Time_ns.Alternate_sexp.t
     ; amount : Money.Amount.Stable.V1.t
     ; beneficiary : Payments_core.Beneficiary.Id.Stable.V1.t option
+    ; sender : string option
     }
   [@@deriving bin_io, sexp, compare, equal]
 
@@ -95,11 +96,11 @@ module Past_transfer = struct
         | Beneficiary b -> Some b.id
         | External _ -> None
       in
-      Some { at; amount = transfer.amount; beneficiary }
+      Some { at; amount = transfer.amount; beneficiary; sender = None }
     | (In | Out), _, _ -> None
   ;;
 
-  let of_incoming (transfer : Payments_core.Transfer.t) =
+  let of_incoming ?(sender_key = Fn.id) (transfer : Payments_core.Transfer.t) =
     let arrived =
       List.mem
         [ "Pending"; "Settled" ]
@@ -107,7 +108,13 @@ module Past_transfer = struct
         ~equal:String.equal
     in
     match transfer.direction, arrived, List.last transfer.history with
-    | In, true, Some (_, at) -> Some { at; amount = transfer.amount; beneficiary = None }
+    | In, true, Some (_, at) ->
+      let sender =
+        match transfer.counterparty with
+        | External { detail; name = _ } -> Some (sender_key detail)
+        | Beneficiary _ -> None
+      in
+      Some { at; amount = transfer.amount; beneficiary = None; sender }
     | (In | Out), _, _ -> None
   ;;
 end
@@ -132,6 +139,16 @@ module Card_auth = struct
   [@@deriving bin_io, sexp, compare, equal]
 end
 
+module Past_auth = struct
+  type t =
+    { at : Time_ns.Alternate_sexp.t
+    ; amount : Money.Amount.Stable.V1.t
+    ; merchant : string
+    ; approved : bool
+    }
+  [@@deriving bin_io, sexp, compare, equal]
+end
+
 module Geo = struct
   type t =
     { ip_country : Country.t option
@@ -147,11 +164,16 @@ module Session = struct
     { new_device : bool
     ; credentials_changed_at : Time_ns.Alternate_sexp.t option
     ; account_opened_at : Time_ns.Alternate_sexp.t option
+    ; failed_sca_24h : int
     }
   [@@deriving bin_io, sexp, compare, equal]
 
   let unknown =
-    { new_device = false; credentials_changed_at = None; account_opened_at = None }
+    { new_device = false
+    ; credentials_changed_at = None
+    ; account_opened_at = None
+    ; failed_sca_24h = 0
+    }
   ;;
 end
 
@@ -170,6 +192,7 @@ type t =
   ; subject : Subject.t
   ; history : Past_transfer.t list
   ; incoming : Past_transfer.t list
+  ; card_history : Past_auth.t list
   ; geo : Geo.t
   ; session : Session.t
   }
@@ -211,6 +234,13 @@ let within t ~window list =
 ;;
 
 let history_within t ~window = within t ~window t.history
+
+let card_history_within t ~window =
+  let since = Time_ns.sub t.now window in
+  List.filter t.card_history ~f:(fun (auth : Past_auth.t) ->
+    Time_ns.( > ) auth.at since && Time_ns.( <= ) auth.at t.now)
+;;
+
 let incoming_within t ~window = within t ~window t.incoming
 
 let countries t =
