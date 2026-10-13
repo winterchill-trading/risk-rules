@@ -23,7 +23,7 @@ let%expect_test "only outgoing transfers to a beneficiary make a context" =
   let incoming =
     Payments_core.Transfer.incoming
       ~id:(Payments_core.Transfer.Id.of_string "in-1")
-      ~rail:Sepa_credit
+      ~rail:Intraledger
       ~account:(Ledger.Account_id.of_string "customer:1/eur")
       ~from:(External { name = "Payer"; detail = "DE89370400440532013000" })
       ~amount:(eur "5.00")
@@ -103,5 +103,5 @@ let%expect_test "context round trips and digest" =
          (module Context.Stable.V1)
          (Binable.to_string (module Context.Stable.V1) ctx)));
   print_endline [%bin_digest: Context.Stable.V1.t];
-  [%expect {| 91267da548d5edfa27e1918a12bf0b60 |}]
+  [%expect {| e2deaa50faaac2b9f180fdc9769a9bc4 |}]
 ;;

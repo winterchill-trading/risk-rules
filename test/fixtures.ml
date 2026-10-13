@@ -33,13 +33,74 @@ let beneficiary
   { b with trusted }
 ;;
 
+let beneficiary_default () = beneficiary ()
 let btc_address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
 
 let wallet_beneficiary () =
   beneficiary ~rail:(Onchain Bitcoin) ~destination:btc_address ()
 ;;
 
-let draft ?(id = "tr-1") ?beneficiary:(b = beneficiary ()) amount =
+(* The customer's own IBAN, needed for the SEPA debtor party. *)
+let debtor_iban =
+  let bban = "100100100123456789" in
+  Payments_core.Iban.of_string_exn
+    ("DE" ^ Payments_core.Iban.check_digits ~country:"DE" ~bban ^ bban)
+;;
+
+let sepa_details ~creditor_iban =
+  let party name iban : Payments_core.Iso20022.Party.t =
+    { name; iban; bic = None; address = None }
+  in
+  Payments_core.Transfer.Details.Sepa
+    (Payments_core.Sepa.Details.create
+       ~payment_id:
+         (Payments_core.Iso20022.Payment_id.create ~end_to_end_id:"E2E-1" ()
+          |> Or_error.ok_exn)
+       ~debtor:(party "Customer One" debtor_iban)
+       ~creditor:(party "Test Payee" creditor_iban)
+       ~remittance:
+         (Payments_core.Iso20022.Remittance.unstructured "test" |> Or_error.ok_exn)
+       ())
+;;
+
+let travel_rule ~address ~wallet : Payments_core.Transfer.Details.t =
+  let person name account : Payments_core.Travel_rule.Person.t =
+    { name; account; identification = Some (Customer_number "cust-1"); lei = None }
+  in
+  Onchain
+    { travel_rule =
+        Some
+          { originator = person "Customer One" "cust-1"
+          ; beneficiary = person "Test Payee" address
+          ; counterparty_wallet = wallet
+          }
+    ; tx_hash = None
+    ; block_hash = None
+    ; confirmations = 0
+    ; finalized = false
+    }
+;;
+
+(* [eur_value] is fixed and below the 1000 EUR self-hosted threshold so payments-core
+   accepts unverified wallets; the risk rule under test uses its own, lower thresholds. *)
+let draft
+  ?(id = "tr-1")
+  ?beneficiary
+  ?(wallet =
+    Payments_core.Travel_rule.Counterparty_wallet.Hosted
+      { provider_name = "Exchange"; provider_lei = None })
+  amount
+  =
+  (* Default payee by currency: a SEPA account for EUR, a Bitcoin address for BTC (SEPA
+     only carries EUR). *)
+  let b =
+    match beneficiary with
+    | Some b -> b
+    | None ->
+      if Money.Currency.equal (Money.Amount.currency amount) Money.Currency.btc
+      then wallet_beneficiary ()
+      else beneficiary_default ()
+  in
   let rail : Payments_core.Rail.t =
     match b.destination with
     | Crypto { address; memo = _ } ->
@@ -48,7 +109,16 @@ let draft ?(id = "tr-1") ?beneficiary:(b = beneficiary ()) amount =
     | Lightning _ -> Lightning
     | Internal _ -> Intraledger
   in
+  let details =
+    match b.destination with
+    | Bank_account { iban; bic = _ } -> Some (sepa_details ~creditor_iban:iban)
+    | Crypto { address; memo = _ } ->
+      Some (travel_rule ~address:(Payments_core.Crypto_address.address address) ~wallet)
+    | Lightning _ | Internal _ -> None
+  in
   Payments_core.Transfer.draft
+    ?details
+    ~eur_value:(eur "100.00")
     ~id:(Payments_core.Transfer.Id.of_string id)
     ~rail
     ~account:(Ledger.Account_id.of_string "customer:1/eur")
@@ -62,7 +132,7 @@ let draft ?(id = "tr-1") ?beneficiary:(b = beneficiary ()) amount =
 let transfer ?id ?beneficiary ?country ?wallet amount =
   Context.Subject.Transfer
     (Or_error.ok_exn
-       (Context.Transfer.create ?country ?wallet (draft ?id ?beneficiary amount)))
+       (Context.Transfer.create ?country (draft ?id ?beneficiary ?wallet amount)))
 ;;
 
 let card
@@ -93,7 +163,9 @@ let past span amount =
 let context
   ?(tier = "basic")
   ?(history = [])
+  ?(incoming = [])
   ?(geo = Context.Geo.unknown)
+  ?(session = Context.Session.unknown)
   ?(balances = [ eur "10000.00" ])
   subject
   =
@@ -103,7 +175,9 @@ let context
   ; balances
   ; subject
   ; history
+  ; incoming
   ; geo
+  ; session
   }
 ;;
 
