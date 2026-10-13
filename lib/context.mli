@@ -57,6 +57,10 @@ module Past_transfer : sig
       failed, cancelled and returned ones, which moved no money. [at] is when it was
       created (its oldest history entry). *)
   val of_transfer : Payments_core.Transfer.t -> t option
+
+  (** Summarises an incoming transfer that reached the account (pending or settled);
+      [None] otherwise. [beneficiary] is [None]. *)
+  val of_incoming : Payments_core.Transfer.t -> t option
 end
 
 module Card_auth : sig
@@ -90,6 +94,21 @@ module Geo : sig
   val unknown : t
 end
 
+module Session : sig
+  (** Signals about the channel the request came through, used for account takeover
+      detection. *)
+  type t =
+    { new_device : bool (** first request from this device or browser *)
+    ; credentials_changed_at : Time_ns.Alternate_sexp.t option
+    (** last password, phone or e-mail change *)
+    ; account_opened_at : Time_ns.Alternate_sexp.t option
+    }
+  [@@deriving bin_io, sexp, compare, equal]
+
+  (** No signals: a known device, no recent changes, account age unknown. *)
+  val unknown : t
+end
+
 module Subject : sig
   type t =
     | Transfer of Transfer.t
@@ -103,8 +122,10 @@ type t =
   ; now : Time_ns.Alternate_sexp.t
   ; balances : Money.Amount.Stable.V1.t list (** available balance per currency *)
   ; subject : Subject.t
-  ; history : Past_transfer.t list (** any order; rules filter by time *)
+  ; history : Past_transfer.t list (** outgoing, any order; rules filter by time *)
+  ; incoming : Past_transfer.t list (** credits received, any order *)
   ; geo : Geo.t
+  ; session : Session.t
   }
 [@@deriving bin_io, sexp, compare, equal]
 
@@ -122,6 +143,9 @@ val card_auth : t -> Card_auth.t option
 
 (** Available balance in a currency, if the customer holds one. *)
 val balance : t -> Money.Currency.t -> Money.Amount.t option
+
+(** Incoming transfers with [now - window < at <= now]. *)
+val incoming_within : t -> window:Time_ns.Span.t -> Past_transfer.t list
 
 (** Past transfers with [now - window < at <= now]. Entries dated after [now] (clock skew
     between services) are ignored rather than counted. *)

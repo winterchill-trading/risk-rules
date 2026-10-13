@@ -24,7 +24,24 @@ module Transfer = struct
     | Crypto _ | Lightning _ | Internal _ -> None
   ;;
 
+  let wallet_of_details : Payments_core.Transfer.Details.t -> Wallet.t option = function
+    | Onchain { travel_rule = Some { counterparty_wallet = Hosted _; _ }; _ } ->
+      Some { self_hosted = false; ownership_verified = false }
+    | Onchain
+        { travel_rule =
+            Some { counterparty_wallet = Self_hosted { ownership_verified }; _ }
+        ; _
+        } -> Some { self_hosted = true; ownership_verified }
+    | Onchain { travel_rule = None; _ } | Sepa _ | Lightning _ | Intraledger | Card ->
+      None
+  ;;
+
   let create ?country ?wallet (draft : Payments_core.Transfer.t) =
+    let wallet =
+      match wallet with
+      | Some _ -> wallet
+      | None -> wallet_of_details draft.details
+    in
     match draft.direction, draft.counterparty with
     | Out, Beneficiary beneficiary ->
       let beneficiary_country =
@@ -55,13 +72,19 @@ module Past_transfer = struct
     (* Transfers still waiting for strong authentication count: otherwise a customer could
        queue many unconfirmed transfers that each pass the cap alone and confirm them
        together. *)
-    (* Matched by constructor name: payments-core is still growing its status
-       set (rejections, recalls), and a name list keeps this summary compiling
-       across those additions. A recall that is requested or refused still
-       has the money out of the account, so it counts. *)
+    (* Matched by constructor name: payments-core is still growing its status set
+       (rejections, recalls), and a name list keeps this summary compiling across those
+       additions. A recall that is requested or refused still has the money out of the
+       account, so it counts. *)
     let counts =
       List.mem
-        [ "Awaiting_sca"; "Submitted"; "Pending"; "Settled"; "Recall_requested"; "Recall_refused" ]
+        [ "Awaiting_sca"
+        ; "Submitted"
+        ; "Pending"
+        ; "Settled"
+        ; "Recall_requested"
+        ; "Recall_refused"
+        ]
         (Payments_core.Transfer.Status.name transfer.status)
         ~equal:String.equal
     in
@@ -73,6 +96,18 @@ module Past_transfer = struct
         | External _ -> None
       in
       Some { at; amount = transfer.amount; beneficiary }
+    | (In | Out), _, _ -> None
+  ;;
+
+  let of_incoming (transfer : Payments_core.Transfer.t) =
+    let arrived =
+      List.mem
+        [ "Pending"; "Settled" ]
+        (Payments_core.Transfer.Status.name transfer.status)
+        ~equal:String.equal
+    in
+    match transfer.direction, arrived, List.last transfer.history with
+    | In, true, Some (_, at) -> Some { at; amount = transfer.amount; beneficiary = None }
     | (In | Out), _, _ -> None
   ;;
 end
@@ -107,6 +142,19 @@ module Geo = struct
   let unknown = { ip_country = None; residence = None }
 end
 
+module Session = struct
+  type t =
+    { new_device : bool
+    ; credentials_changed_at : Time_ns.Alternate_sexp.t option
+    ; account_opened_at : Time_ns.Alternate_sexp.t option
+    }
+  [@@deriving bin_io, sexp, compare, equal]
+
+  let unknown =
+    { new_device = false; credentials_changed_at = None; account_opened_at = None }
+  ;;
+end
+
 module Subject = struct
   type t =
     | Transfer of Transfer.t
@@ -121,7 +169,9 @@ type t =
   ; balances : Money.Amount.Stable.V1.t list
   ; subject : Subject.t
   ; history : Past_transfer.t list
+  ; incoming : Past_transfer.t list
   ; geo : Geo.t
+  ; session : Session.t
   }
 [@@deriving bin_io, sexp, compare, equal]
 
@@ -154,11 +204,14 @@ let balance t currency =
     Money.Currency.equal (Money.Amount.currency amount) currency)
 ;;
 
-let history_within t ~window =
+let within t ~window list =
   let since = Time_ns.sub t.now window in
-  List.filter t.history ~f:(fun (past : Past_transfer.t) ->
+  List.filter list ~f:(fun (past : Past_transfer.t) ->
     Time_ns.( > ) past.at since && Time_ns.( <= ) past.at t.now)
 ;;
+
+let history_within t ~window = within t ~window t.history
+let incoming_within t ~window = within t ~window t.incoming
 
 let countries t =
   let counterparty =
