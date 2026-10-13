@@ -34,8 +34,9 @@
       (trusted false) (first_seen "2026-10-13 10:00:00Z") (payee_check ())))
     (beneficiary_country (DE)) (wallet ()))))
  (history
-  (((at "2026-10-13 09:00:00Z") (amount "900.00 EUR") (beneficiary (ben-1)))
-   ((at "2026-10-12 06:00:00Z") (amount "200.00 EUR") (beneficiary (ben-1)))))
- (incoming ()) (geo ((ip_country (DE)) (residence (DE))))
+  (((at "2026-10-13 09:00:00Z") (amount "900.00 EUR") (beneficiary (ben-1)) (sender ()))
+   ((at "2026-10-12 06:00:00Z") (amount "200.00 EUR") (beneficiary (ben-1)) (sender ()))))
+ (incoming ()) (card_history ()) (geo ((ip_country (DE)) (residence (DE))))
  (session
-  ((new_device false) (credentials_changed_at ()) (account_opened_at ()))))
+  ((new_device false) (credentials_changed_at ()) (account_opened_at ())
+   (failed_sca_24h 0))))
