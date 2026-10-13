@@ -26,6 +26,7 @@ let check_policy =
 let exit_code (decision : Decision.t) =
   match decision.severity with
   | Allow -> 0
+  | Challenge -> 5
   | Review -> 10
   | Block -> 20
 ;;
@@ -35,7 +36,7 @@ let evaluate =
     ~summary:"Evaluate a context sexp against a policy and print the decision"
     ~readme:(fun () ->
       "The context file holds one Risk_rules.Context.t sexp (see \
-       examples/context-transfer.sexp). Exit code: 0 allow, 10 review, 20 block.")
+       examples/context-transfer.sexp). Exit code: 0 allow, 5 challenge, 10 review, 20 block.")
     (let%map_open.Command path = policy_flag
      and context = anon ("CONTEXT" %: string)
      and sexp = flag "-sexp" no_arg ~doc:" print the decision as a sexp" in

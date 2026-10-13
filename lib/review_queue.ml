@@ -135,7 +135,8 @@ let find_by_reference t reference =
 
 let submit t ~reference ~customer ~(decision : Decision.t) ~at =
   match decision.severity with
-  | Allow -> Or_error.error_s [%message "review queue: nothing to review" reference]
+  | Allow | Challenge ->
+    Or_error.error_s [%message "review queue: nothing to review" reference]
   | Review | Block ->
     if List.exists (find_by_reference t reference) ~f:Item.is_pending
     then Or_error.error_s [%message "review queue: already pending" reference]

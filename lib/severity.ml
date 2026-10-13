@@ -6,6 +6,7 @@ module Stable = struct
        never reorder or insert in the middle. *)
     type t =
       | Allow
+      | Challenge
       | Review
       | Block
     [@@deriving bin_io, sexp, compare, equal, hash, quickcheck]
@@ -15,6 +16,7 @@ end
 module T = struct
   type t = Stable.V1.t =
     | Allow
+    | Challenge
     | Review
     | Block
   [@@deriving sexp, compare, equal, hash, quickcheck, enumerate]
@@ -27,6 +29,7 @@ let worst a b = max a b
 
 let to_string = function
   | Allow -> "allow"
+  | Challenge -> "challenge"
   | Review -> "review"
   | Block -> "block"
 ;;
