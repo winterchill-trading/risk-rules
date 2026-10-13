@@ -121,9 +121,9 @@ type t = Stable.V1.t [@@deriving sexp, compare, equal]
 val empty : t
 
 (** Hold an operation. Only [Review] and [Block] decisions are accepted ([Block] items are
-    kept so an operator can confirm or overturn them); an [Allow] or [Challenge] decision has nothing to
-    review. A reference already in the queue and still pending is refused, so retries do
-    not create duplicates. *)
+    kept so an operator can confirm or overturn them); an [Allow] or [Challenge] decision
+    has nothing to review. A reference already in the queue and still pending is refused,
+    so retries do not create duplicates. *)
 val submit
   :  t
   -> reference:string

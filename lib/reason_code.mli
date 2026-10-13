@@ -1,14 +1,13 @@
 (** Stable reason codes carried by every hit.
 
-    A code has three audiences: the audit log (the code and the hit's
-    detailed reason), operators (the description) and the customer (a
-    decline message). Customer messages are deliberately generic for
-    suspicion typologies (mule, structuring, account takeover, scores):
-    telling a customer that a payment looks like money laundering can
+    A code has three audiences: the audit log (the code and the hit's detailed reason),
+    operators (the description) and the customer (a decline message). Customer messages
+    are deliberately generic for suspicion typologies (mule, structuring, account
+    takeover, scores): telling a customer that a payment looks like money laundering can
     amount to tipping off, so they only say the payment needs a check.
 
-    The text form (["LIMIT_DAILY"], ["CUSTOM_MY_RULE"]) is the stable
-    identifier; sexp uses it too. *)
+    The text form (["LIMIT_DAILY"], ["CUSTOM_MY_RULE"]) is the stable identifier; sexp
+    uses it too. *)
 
 open! Core
 

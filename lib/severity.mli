@@ -1,9 +1,8 @@
 (** How strongly a rule objects to an operation.
 
-    Ordered [Allow < Challenge < Review < Block]; the engine keeps the worst
-    one. [Challenge] lets the operation through once the customer passes
-    strong customer authentication (a step-up); [Review] holds it for an
-    operator; [Block] refuses it. *)
+    Ordered [Allow < Challenge < Review < Block]; the engine keeps the worst one.
+    [Challenge] lets the operation through once the customer passes strong customer
+    authentication (a step-up); [Review] holds it for an operator; [Block] refuses it. *)
 
 open! Core
 

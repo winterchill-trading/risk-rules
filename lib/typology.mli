@@ -1,6 +1,6 @@
-(** Families of financial crime and control a hit belongs to, named after
-    the usual transaction-monitoring typologies so audit logs and model
-    training labels group the same way. *)
+(** Families of financial crime and control a hit belongs to, named after the usual
+    transaction-monitoring typologies so audit logs and model training labels group the
+    same way. *)
 
 open! Core
 

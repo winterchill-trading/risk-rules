@@ -132,7 +132,8 @@ let customer_message = function
   | Limit_daily -> "This payment would take you over your daily limit."
   | Limit_monthly -> "This payment would take you over your monthly limit."
   | Limit_window -> "This payment would take you over your account limit."
-  | Velocity_out -> "You have made several payments in a short time. Please try again later."
+  | Velocity_out ->
+    "You have made several payments in a short time. Please try again later."
   | New_beneficiary_cooldown ->
     "Payments to a newly added payee are limited for a short time. Please try a smaller \
      amount or try again later."
@@ -144,11 +145,11 @@ let customer_message = function
   | Card_online_disabled ->
     "Online payments are switched off for this card. You can switch them on in the app."
   | Sca_required -> "Please confirm this payment in the app."
-  (* Push payment scams target the customer as a victim, so a warning helps
-     rather than tips anyone off. *)
+  (* Push payment scams target the customer as a victim, so a warning helps rather than
+     tips anyone off. *)
   | App_new_beneficiary_balance ->
-    "This payment matches a common scam: no bank will ever ask you to move your money \
-     to a new account to keep it safe. We need to check it before it is sent."
+    "This payment matches a common scam: no bank will ever ask you to move your money to \
+     a new account to keep it safe. We need to check it before it is sent."
   | Unknown_tier | Rule_error | Score_unavailable ->
     "We cannot process this payment right now. Please try again later."
   (* Suspicion typologies: neutral wording, see the interface comment. *)
