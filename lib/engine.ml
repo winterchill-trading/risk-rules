@@ -7,7 +7,10 @@ let check_one rule ctx =
     Some
       { Hit.rule = Rule.name rule
       ; severity = Block
+      ; code = Rule_error
+      ; typology = Operational
       ; reason = "rule raised: " ^ Exn.to_string exn
+      ; evidence = []
       }
 ;;
 
