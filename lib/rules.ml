@@ -442,11 +442,16 @@ let model_score ?(name = "model_score") model thresholds =
       ; code = Score_high
       ; reason =
           sprintf
-            "%s %s scored %.4f (%s)"
+            "%s %s scored %.4f%s"
             (Model.name model)
             (Model.version model)
             score.value
-            (String.concat ~sep:", " (List.map score.reasons ~f:fst))
+            (match score.reasons with
+             | [] -> ""
+             | reasons ->
+               sprintf
+                 " (top reasons: %s)"
+                 (String.concat ~sep:", " (List.map reasons ~f:fst)))
       ; evidence = score_evidence model score
       }))
 ;;
