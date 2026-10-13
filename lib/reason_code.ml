@@ -20,6 +20,12 @@ module Stable = struct
         | Mule_pass_through
         | Account_takeover_signals
         | App_new_beneficiary_balance
+        | Mule_fan_in
+        | New_account_payout
+        | Vop_not_matched
+        | Card_testing
+        | App_first_large_payment
+        | Sca_exempt
         | Score_high
         | Score_unavailable
         | Sca_required
@@ -75,6 +81,12 @@ let builtin =
   ; Mule_pass_through
   ; Account_takeover_signals
   ; App_new_beneficiary_balance
+  ; Mule_fan_in
+  ; New_account_payout
+  ; Vop_not_matched
+  ; Card_testing
+  ; App_first_large_payment
+  ; Sca_exempt
   ; Score_high
   ; Score_unavailable
   ; Sca_required
@@ -90,11 +102,11 @@ let typology : t -> Typology.t = function
   | Structuring -> Structuring
   | Geo_blocked | Geo_high_risk -> Sanctions_geography
   | Travel_rule_self_hosted -> Travel_rule
-  | Card_mcc_blocked | Card_online_disabled -> Card_controls
-  | Mule_pass_through -> Money_mule
-  | App_new_beneficiary_balance -> App_fraud
+  | Card_mcc_blocked | Card_online_disabled | Card_testing -> Card_controls
+  | Mule_pass_through | Mule_fan_in | New_account_payout -> Money_mule
+  | App_new_beneficiary_balance | App_first_large_payment | Vop_not_matched -> App_fraud
   | Score_high | Score_unavailable -> Model_score
-  | Sca_required -> Strong_authentication
+  | Sca_required | Sca_exempt -> Strong_authentication
   | Manual_review | Rule_error | Unknown_tier | Custom _ -> Operational
 ;;
 
@@ -117,6 +129,13 @@ let description = function
   | Account_takeover_signals -> "several account takeover signals at once"
   | App_new_beneficiary_balance ->
     "most of the balance to a new beneficiary (push payment scam pattern)"
+  | Mule_fan_in -> "many distinct payers into a young account (money mule pattern)"
+  | New_account_payout -> "large payout from a newly opened account"
+  | Vop_not_matched -> "verification of payee did not match the beneficiary name"
+  | Card_testing -> "many small or declined card authorisations in a short time"
+  | App_first_large_payment ->
+    "payment far above the customer's usual amount to a new beneficiary"
+  | Sca_exempt -> "strong customer authentication exemption applied (informational)"
   | Score_high -> "model fraud score above the policy threshold"
   | Score_unavailable -> "the scoring model named by the policy is not loaded"
   | Sca_required -> "strong customer authentication needed, no exemption applies"
@@ -145,9 +164,15 @@ let customer_message = function
   | Card_online_disabled ->
     "Online payments are switched off for this card. You can switch them on in the app."
   | Sca_required -> "Please confirm this payment in the app."
+  | Sca_exempt -> "No confirmation needed."
+  | Vop_not_matched ->
+    "The name you entered does not match the account holder. Please check the payee \
+     before sending: if you were asked to pay this account by someone you have not met, \
+     it may be a scam."
+  | Card_testing -> "Your card has been paused for your protection. Please check the app."
   (* Push payment scams target the customer as a victim, so a warning helps rather than
      tips anyone off. *)
-  | App_new_beneficiary_balance ->
+  | App_new_beneficiary_balance | App_first_large_payment ->
     "This payment matches a common scam: no bank will ever ask you to move your money to \
      a new account to keep it safe. We need to check it before it is sent."
   | Unknown_tier | Rule_error | Score_unavailable ->
@@ -158,6 +183,8 @@ let customer_message = function
   | Manual_review
   | Mule_pass_through
   | Account_takeover_signals
+  | Mule_fan_in
+  | New_account_payout
   | Score_high
   | Custom _ -> check_message
 ;;

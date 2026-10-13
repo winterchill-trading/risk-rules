@@ -30,6 +30,12 @@ module Stable : sig
       | Mule_pass_through
       | Account_takeover_signals
       | App_new_beneficiary_balance
+      | Mule_fan_in
+      | New_account_payout
+      | Vop_not_matched
+      | Card_testing
+      | App_first_large_payment
+      | Sca_exempt
       | Score_high
       | Score_unavailable
       | Sca_required
@@ -59,6 +65,12 @@ type t = Stable.V1.t =
   | Mule_pass_through
   | Account_takeover_signals
   | App_new_beneficiary_balance
+  | Mule_fan_in
+  | New_account_payout
+  | Vop_not_matched
+  | Card_testing
+  | App_first_large_payment
+  | Sca_exempt
   | Score_high
   | Score_unavailable
   | Sca_required
