@@ -23,6 +23,14 @@ module Transfer = struct
       Country.of_string_or_error (Payments_core.Iban.country iban) |> Result.ok
     | Uk_account _ -> Some (Country.of_string "GB")
     | Us_account _ -> Some (Country.of_string "US")
+    (* Local scheme names start with the market's country code ([kg], [ch_qr_iban]). *)
+    | Local { scheme; fields = _ } ->
+      let prefix =
+        Option.value_map (String.lsplit2 scheme ~on:'_') ~default:scheme ~f:fst
+      in
+      if String.length prefix = 2
+      then Country.of_string_or_error (String.uppercase prefix) |> Result.ok
+      else None
     | Crypto _ | Lightning _ | Internal _ -> None
   ;;
 
