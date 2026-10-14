@@ -169,7 +169,9 @@ let of_context (ctx : Context.t) =
           | Match -> "Match"
           | Close_match _ -> "Close_match"
           | No_match -> "No_match"
-          | Not_possible -> "Not_possible"))
+          | Not_possible -> "Not_possible"
+          | Account_not_found -> "Account_not_found"
+          | Unavailable -> "Unavailable"))
   ; card_auths_10m = List.length card_10m
   ; card_declines_10m = List.count card_10m ~f:(fun a -> not a.approved)
   ; hour_of_day_utc =

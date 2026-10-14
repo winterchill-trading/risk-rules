@@ -21,6 +21,7 @@ module Transfer = struct
     match beneficiary.destination with
     | Bank_account { iban; bic = _ } ->
       Country.of_string_or_error (Payments_core.Iban.country iban) |> Result.ok
+    | Uk_account _ -> Some (Country.of_string "GB")
     | Crypto _ | Lightning _ | Internal _ -> None
   ;;
 
@@ -32,8 +33,8 @@ module Transfer = struct
             Some { counterparty_wallet = Self_hosted { ownership_verified }; _ }
         ; _
         } -> Some { self_hosted = true; ownership_verified }
-    | Onchain { travel_rule = None; _ } | Sepa _ | Lightning _ | Intraledger | Card ->
-      None
+    | Onchain { travel_rule = None; _ }
+    | Sepa _ | Lightning _ | Intraledger | Card | Uk_domestic _ -> None
   ;;
 
   let create ?country ?wallet (draft : Payments_core.Transfer.t) =
