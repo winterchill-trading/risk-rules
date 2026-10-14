@@ -460,7 +460,12 @@ let vop_not_matched ?(name = "vop_not_matched") ?(severity = Severity.Review) ()
       Some
         ( "verification of payee: close match, holder is " ^ suggested_name
         , [ "payee_check", "Close_match" ] )
-    | Some (Match | Not_possible) | None -> None)
+    (* The receiving bank says the account does not exist: as alarming as a mismatch. *)
+    | Some Account_not_found ->
+      Some
+        ( "verification of payee: account not found"
+        , [ "payee_check", "Account_not_found" ] )
+    | Some (Match | Not_possible | Unavailable) | None -> None)
 ;;
 
 let country_rule ~name ~severity ~code ~label countries =
