@@ -110,13 +110,14 @@ let draft
     | Internal _ -> Intraledger
     | Uk_account _ -> Faster_payments
     | Us_account _ -> Ach { sec = Ppd; same_day = false }
+    | Local _ -> failwith "fixtures: no rail reaches a local destination"
   in
   let details =
     match b.destination with
     | Bank_account { iban; bic = _ } -> Some (sepa_details ~creditor_iban:iban)
     | Crypto { address; memo = _ } ->
       Some (travel_rule ~address:(Payments_core.Crypto_address.address address) ~wallet)
-    | Lightning _ | Internal _ | Uk_account _ | Us_account _ -> None
+    | Lightning _ | Internal _ | Uk_account _ | Us_account _ | Local _ -> None
   in
   Payments_core.Transfer.draft
     ?details
